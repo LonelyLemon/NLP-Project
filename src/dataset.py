@@ -1,11 +1,10 @@
 import torch
+from torch.utils.data import Dataset
+from torch.nn.utils.rnn import pad_sequence
+from collections import Counter
 import re
 
-from torch.utils.data import Dataset, DataLoader
-from collections import Counter
 
-
-# Token Define
 UNK_TOKEN = '<unk>'
 PAD_TOKEN = '<pad>'
 SOS_TOKEN = '<sos>' # Start of Sentence
@@ -22,12 +21,11 @@ class Vocabulary:
 
     @staticmethod
     def tokenizer(text):
-        # Tokenizer
         return [tok.lower() for tok in re.findall(r"\w+|[^\w\s]", text, re.UNICODE)]
 
     def build_vocabulary(self, sentence_list):
         frequencies = Counter()
-        idx = 4
+        idx = 4 
 
         for sentence in sentence_list:
             for word in self.tokenizer(sentence):
@@ -57,10 +55,9 @@ class BilingualDataset(Dataset):
         return len(self.dataset)
 
     def __getitem__(self, index):
-        src_text = self.dataset[index]['translation'][self.src_lang]
-        trg_text = self.dataset[index]['translation'][self.trg_lang]
+        src_text = self.dataset[index][self.src_lang]
+        trg_text = self.dataset[index][self.trg_lang]
 
-        # Text -> List of indices
         src_numericalized = [self.src_vocab.stoi[SOS_TOKEN]]
         src_numericalized += self.src_vocab.numericalize(src_text)
         src_numericalized.append(self.src_vocab.stoi[EOS_TOKEN])
@@ -70,3 +67,16 @@ class BilingualDataset(Dataset):
         trg_numericalized.append(self.trg_vocab.stoi[EOS_TOKEN])
 
         return torch.tensor(src_numericalized), torch.tensor(trg_numericalized)
+
+class Collate:
+    def __init__(self, pad_idx):
+        self.pad_idx = pad_idx
+
+    def __call__(self, batch):
+        src = [item[0] for item in batch]
+        trg = [item[1] for item in batch]
+
+        src = pad_sequence(src, batch_first=True, padding_value=self.pad_idx)
+        trg = pad_sequence(trg, batch_first=True, padding_value=self.pad_idx)
+
+        return src, trg
