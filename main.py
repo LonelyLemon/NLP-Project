@@ -1,16 +1,16 @@
-# main.py
 import torch
 from datasets import load_dataset
 from src.dataset import Vocabulary, BilingualDataset, Collate, PAD_TOKEN
 
 def main():
     print(">>> 1. Đang tải dữ liệu IWSLT2015 (En-Vi)...")
-    dataset = load_dataset("mt_eng_vietnamese", "iwslt2015-en-vi", split='train[:1%]')
+    dataset = load_dataset("thainq107/iwslt2015-en-vi", split='train[:1%]')
+    print("DEBUG: Cấu trúc dữ liệu thực tế:", dataset[0])
     print(f"Số lượng mẫu: {len(dataset)}")
 
     print("\n>>> 2. Đang xây dựng Vocabulary...")
-    src_sentences = [x['translation']['en'] for x in dataset]
-    trg_sentences = [x['translation']['vi'] for x in dataset]
+    src_sentences = [x['en'] for x in dataset]
+    trg_sentences = [x['vi'] for x in dataset]
 
     src_vocab = Vocabulary(freq_threshold=1)
     src_vocab.build_vocabulary(src_sentences)
@@ -33,7 +33,6 @@ def main():
         collate_fn=Collate(pad_idx=pad_idx)
     )
 
-    # Kiểm tra 1 batch
     src_batch, trg_batch = next(iter(train_loader))
     print("\n>>> 4. Kiểm tra Batch Output:")
     print(f"Source Batch Shape: {src_batch.shape}")
