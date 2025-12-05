@@ -35,7 +35,7 @@ def main():
         'max_len': 5000,
         
         # Training
-        'batch_size': 32,
+        'batch_size': 8,
         'num_epochs': 20,
         'learning_rate': 1e-4,
         'weight_decay': 1e-4,
