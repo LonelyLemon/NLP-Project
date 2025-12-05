@@ -291,8 +291,7 @@ def create_scheduler(optimizer, mode='plateau', factor=0.5, patience=3, min_lr=1
             mode='min',
             factor=factor,
             patience=patience,
-            min_lr=min_lr,
-            verbose=True
+            min_lr=min_lr
         )
     elif mode == 'step':
         return torch.optim.lr_scheduler.StepLR(
