@@ -24,24 +24,26 @@ class MultiHeadAttention(nn.Module):
     def forward(self, q, k, v, mask=None):
         """
         Args:
-            q: [B, L, D]
-            k: [B, L, D]
-            v: [B, L, D]
+            q: [B, L_q, D]
+            k: [B, L_k, D]
+            v: [B, L_v, D]
         Returns:
-            context: [B, L, D]
+            context: [B, L_q, D]
         """
-        B, L, D = q.size()
+        B = q.size(0)
+        L_q = q.size(1)
+        L_k = k.size(1)
+        L_v = v.size(1)
 
-        # [B, L, D]
+        # Linear projections: [B, L, D]
         Q = self.Q_linear(q)
         K = self.K_linear(k)
         V = self.V_linear(v)
 
-        def split_heads(x):
-            # [B, L, num_heads, head_dim] -> [B, num_heads, L, head_dim]
-            return x.view(B, L, self.num_heads, self.head_dim).transpose(1, 2)
-
-        Q, K, V = split_heads(Q), split_heads(K), split_heads(V)
+        # Split heads: [B, L, D] -> [B, num_heads, L, head_dim]
+        Q = Q.view(B, L_q, self.num_heads, self.head_dim).transpose(1, 2)
+        K = K.view(B, L_k, self.num_heads, self.head_dim).transpose(1, 2)
+        V = V.view(B, L_v, self.num_heads, self.head_dim).transpose(1, 2)
 
         # [B, num_heads, L, L]
         scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.head_dim)
@@ -50,10 +52,10 @@ class MultiHeadAttention(nn.Module):
         attn_weights = torch.softmax(scores, dim=-1)
         attn_weights = self.dropout(attn_weights)
         
-        # [B, H, L, head_dim]
+        # [B, H, L_q, head_dim]
         context = torch.matmul(attn_weights, V)
 
-        # [B, L, D]
-        context = context.transpose(1,2).contiguous().view(B, L, D)
+        # [B, L_q, D]
+        context = context.transpose(1, 2).contiguous().view(B, L_q, self.model_dim)
         out = self.out_proj(context)
         return out

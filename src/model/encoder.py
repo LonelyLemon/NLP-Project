@@ -25,6 +25,6 @@ class Encoder(nn.Module):
 
         # [B, L, D]
         ffn_out = self.ffn(attn_out)
-        ffn_out = self.norm2(x + self.dropout(ffn_out))
+        ffn_out = self.norm2(attn_out + self.dropout(ffn_out))
 
         return ffn_out

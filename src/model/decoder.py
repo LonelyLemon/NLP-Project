@@ -37,7 +37,7 @@ class Decoder(nn.Module):
         cross_attn_out = self.cross_attn(x2, enc_output, enc_output, src_mask)
         x3 = self.norm2(x2 + self.dropout(cross_attn_out))
 
-        ffn_out = self.feed_forward(x3)
+        ffn_out = self.ffn(x3)
         x4 = self.norm3(x3 + self.dropout(ffn_out))
 
         return x4
