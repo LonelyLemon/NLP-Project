@@ -14,8 +14,8 @@ def create_padding_mask(seq, pad_idx):
         mask: [B, 1, 1, L] - Mask cho attention (1 = ignore, 0 = attend)
     """
     # [B, L] -> [B, 1, 1, L]
-    mask = (seq == pad_idx).unsqueeze(1).unsqueeze(2)
-    return mask
+    mask = (seq != pad_idx).unsqueeze(1).unsqueeze(2)
+    return mask.float()
 
 
 def create_causal_mask(seq_len, device='cpu'):
@@ -29,10 +29,8 @@ def create_causal_mask(seq_len, device='cpu'):
     Returns:
         mask: [1, 1, seq_len, seq_len] - Upper triangular mask
     """
-    # Tạo upper triangular matrix (trên đường chéo = 1)
-    mask = torch.triu(torch.ones(seq_len, seq_len, device=device), diagonal=1).bool()
-    # [L, L] -> [1, 1, L, L]
-    return mask.unsqueeze(0).unsqueeze(0)
+    mask = torch.tril(torch.ones(seq_len, seq_len, device=device)).bool()
+    return mask.unsqueeze(0).unsqueeze(0).float()
 
 
 def create_masks(src, tgt, pad_idx, device='cpu'):
@@ -60,7 +58,8 @@ def create_masks(src, tgt, pad_idx, device='cpu'):
     tgt_causal_mask = create_causal_mask(tgt_len, device)  # [1, 1, T, T]
     
     # Combine: padding mask OR causal mask
-    tgt_mask = tgt_padding_mask | tgt_causal_mask  # [B, 1, T, T]
+    tgt_padding_mask = tgt_padding_mask.expand(-1, -1, tgt_len, -1)
+    tgt_mask = tgt_padding_mask * tgt_causal_mask  # [B, 1, T, T]
     
     return src_mask, tgt_mask
 
