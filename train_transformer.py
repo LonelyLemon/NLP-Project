@@ -10,7 +10,7 @@ from datasets import load_dataset
 
 from src.dataset import Vocabulary, BilingualDataset, Collate, PAD_TOKEN
 from src.model.transformer import Transformer
-from src.train import Trainer, create_optimizer, create_scheduler
+from src.train import Trainer, create_optimizer, create_scheduler, WarmupScheduler
 from src.inference import GreedySearchDecoder, BeamSearchDecoder
 from src.evaluate import Evaluator
 from src.visualization import generate_all_plots
@@ -26,19 +26,20 @@ def main():
     # Hyperparameters
     CONFIG = {
         # Model
-        'model_dim': 512,
-        'num_heads': 8,
-        'num_enc_layers': 6,
-        'num_dec_layers': 6,
-        'ff_hidden_dim': 2048,
+        'model_dim': 384,
+        'num_heads': 6,
+        'num_enc_layers': 4,
+        'num_dec_layers': 4,
+        'ff_hidden_dim': 1536,
         'dropout': 0.1,
         'max_len': 5000,
         
         # Training
         'batch_size': 8,
         'num_epochs': 20,
-        'learning_rate': 1e-4,
-        'weight_decay': 1e-4,
+        'learning_rate': 5e-5,  # Reduced to prevent NaN loss
+        'weight_decay': 1e-5,
+        'warmup_steps': 4000,  # Warmup for stable training
         'patience': 5,  # Early stopping
         
         # Data
@@ -166,26 +167,34 @@ def main():
     print("="*60)
     
     # Loss function (ignore padding)
-    criterion = nn.CrossEntropyLoss(ignore_index=pad_idx, label_smoothing=0.1)
+    criterion = nn.CrossEntropyLoss(ignore_index=pad_idx, label_smoothing=0.05)
     
-    # Optimizer
+    # Optimizer (learning rate sẽ được điều chỉnh bởi warmup scheduler)
     optimizer = create_optimizer(
         model,
-        learning_rate=CONFIG['learning_rate'],
+        learning_rate=1.0,  # Base LR, sẽ được warmup scheduler điều chỉnh
         weight_decay=CONFIG['weight_decay']
     )
     
-    # Learning rate scheduler
-    scheduler = create_scheduler(
+    # Warmup scheduler (theo paper "Attention is All You Need")
+    warmup_scheduler = WarmupScheduler(
+        optimizer,
+        d_model=CONFIG['model_dim'],
+        warmup_steps=CONFIG['warmup_steps']
+    )
+    
+    # Learning rate scheduler (sau warmup)
+    plateau_scheduler = create_scheduler(
         optimizer,
         mode='plateau',
         factor=0.5,
         patience=3
     )
     
-    print(f"  Loss function: CrossEntropyLoss (ignore_index={pad_idx}, label_smoothing=0.1)")
-    print(f"  Optimizer: Adam (lr={CONFIG['learning_rate']}, weight_decay={CONFIG['weight_decay']})")
-    print(f"  Scheduler: ReduceLROnPlateau (factor=0.5, patience=3)")
+    print(f"  Loss function: CrossEntropyLoss (ignore_index={pad_idx}, label_smoothing=0.05)")
+    print(f"  Optimizer: Adam (base_lr=1.0, weight_decay={CONFIG['weight_decay']})")
+    print(f"  Warmup Scheduler: {CONFIG['warmup_steps']} steps")
+    print(f"  Plateau Scheduler: ReduceLROnPlateau (factor=0.5, patience=3)")
     print("="*60 + "\n")
     
     # ==================== 6. TRAINING ====================
@@ -204,7 +213,8 @@ def main():
     
     trainer.train(
         num_epochs=CONFIG['num_epochs'],
-        scheduler=scheduler,
+        warmup_scheduler=warmup_scheduler,
+        plateau_scheduler=plateau_scheduler,
         patience=CONFIG['patience']
     )
     

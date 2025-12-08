@@ -59,9 +59,12 @@ class Trainer:
         
         self.best_val_loss = float('inf')
         
-    def train_epoch(self, epoch):
+    def train_epoch(self, epoch, warmup_scheduler=None):
         """
         Train một epoch.
+        
+        Args:
+            warmup_scheduler: WarmupScheduler - Warmup scheduler (optional)
         
         Returns:
             avg_loss: float - Average training loss
@@ -95,6 +98,11 @@ class Trainer:
             
             loss = self.criterion(logits, tgt_output)
             
+            # Check for NaN loss
+            if torch.isnan(loss) or torch.isinf(loss):
+                print(f"\n⚠️ Warning: NaN/Inf loss detected! Skipping batch.")
+                continue
+            
             # Backward pass
             loss.backward()
             
@@ -103,10 +111,15 @@ class Trainer:
             
             self.optimizer.step()
             
+            # Update warmup scheduler (per batch)
+            if warmup_scheduler is not None:
+                warmup_scheduler.step()
+            
             total_loss += loss.item()
             
-            # Update progress bar
-            pbar.set_postfix({'loss': f'{loss.item():.4f}'})
+            # Update progress bar with current LR
+            current_lr = self.optimizer.param_groups[0]['lr']
+            pbar.set_postfix({'loss': f'{loss.item():.4f}', 'lr': f'{current_lr:.2e}'})
         
         avg_loss = total_loss / len(self.train_loader)
         return avg_loss
@@ -145,13 +158,14 @@ class Trainer:
         avg_loss = total_loss / len(self.val_loader)
         return avg_loss
     
-    def train(self, num_epochs, scheduler=None, patience=5):
+    def train(self, num_epochs, warmup_scheduler=None, plateau_scheduler=None, patience=5):
         """
         Training loop chính.
         
         Args:
             num_epochs: int - Số epochs
-            scheduler: Learning rate scheduler (optional)
+            warmup_scheduler: WarmupScheduler - Warmup scheduler (optional)
+            plateau_scheduler: ReduceLROnPlateau - Plateau scheduler (optional)
             patience: int - Early stopping patience
         """
         print("\n" + "="*60)
@@ -168,7 +182,7 @@ class Trainer:
         
         for epoch in range(1, num_epochs + 1):
             # Train
-            train_loss = self.train_epoch(epoch)
+            train_loss = self.train_epoch(epoch, warmup_scheduler)
             
             # Validate
             val_loss = self.validate(epoch)
@@ -206,12 +220,9 @@ class Trainer:
                 epochs_no_improve += 1
                 print(f"   ⏳ No improvement for {epochs_no_improve} epoch(s)")
             
-            # Learning rate scheduling
-            if scheduler is not None:
-                if isinstance(scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
-                    scheduler.step(val_loss)
-                else:
-                    scheduler.step()
+            # Learning rate scheduling (plateau scheduler after warmup)
+            if plateau_scheduler is not None:
+                plateau_scheduler.step(val_loss)
             
             # Early stopping
             if epochs_no_improve >= patience:
@@ -301,3 +312,41 @@ def create_scheduler(optimizer, mode='plateau', factor=0.5, patience=3, min_lr=1
         )
     else:
         raise ValueError(f"Unknown scheduler mode: {mode}")
+
+
+class WarmupScheduler:
+    """
+    Learning rate scheduler with warmup.
+    Implements the schedule from "Attention is All You Need" paper.
+    
+    lr = d_model^(-0.5) * min(step^(-0.5), step * warmup_steps^(-1.5))
+    """
+    def __init__(self, optimizer, d_model, warmup_steps=4000):
+        """
+        Args:
+            optimizer: Optimizer
+            d_model: int - Model dimension
+            warmup_steps: int - Number of warmup steps
+        """
+        self.optimizer = optimizer
+        self.d_model = d_model
+        self.warmup_steps = warmup_steps
+        self.current_step = 0
+        self._update_lr()
+    
+    def step(self):
+        """Update learning rate."""
+        self.current_step += 1
+        self._update_lr()
+    
+    def _update_lr(self):
+        """Calculate and update learning rate."""
+        step = max(self.current_step, 1)  # Avoid division by zero
+        lr = (self.d_model ** -0.5) * min(step ** -0.5, step * self.warmup_steps ** -1.5)
+        
+        for param_group in self.optimizer.param_groups:
+            param_group['lr'] = lr
+    
+    def get_last_lr(self):
+        """Get current learning rate."""
+        return [param_group['lr'] for param_group in self.optimizer.param_groups]
