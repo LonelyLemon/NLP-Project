@@ -1,3 +1,14 @@
+# Ignore virtual environments
+.venv
+
+# Environment configuration files
 .env
-.venv/
-/__pycache__/
+.env.docker
+
+# Python cache artifacts
+__pycache__/
+*/__pycache__
+**/__pycache__/
+
+# Local error log file
+error_log.txt
