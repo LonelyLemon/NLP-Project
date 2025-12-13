@@ -1,7 +1,7 @@
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM
 from peft import PeftModel
-from src.config import Config
+from vlsp.config import Config
 import sacrebleu
 from tqdm import tqdm
 

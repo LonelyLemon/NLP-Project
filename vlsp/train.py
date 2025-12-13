@@ -8,8 +8,8 @@ from transformers import (
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 from trl import SFTTrainer
 
-from src.config import Config
-from src.data_loader import get_formatted_dataset
+from vlsp.config import Config
+from vlsp.data_loader import get_formatted_dataset
 
 def train():
     # 1. Load Data
