@@ -1,19 +1,25 @@
 import torch
 import torch.nn as nn
 import math
+from .rope import RoPE
 
 class MultiHeadAttention(nn.Module):
     def __init__(
         self, 
         model_dim: int, 
         num_heads: int, 
-        dropout: float = 0.1
+        dropout: float = 0.1,
+        use_rope: bool = False
     ):
         super().__init__()
         assert model_dim % num_heads == 0, "embedding_dim phải chia hết cho num_heads"
         self.model_dim = model_dim
         self.num_heads = num_heads
         self.head_dim = model_dim // num_heads
+        self.use_rope = use_rope
+
+        if use_rope:
+            self.rope = RoPE(model_dim)
 
         self.Q_linear = nn.Linear(model_dim, model_dim)
         self.K_linear = nn.Linear(model_dim, model_dim)

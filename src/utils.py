@@ -4,14 +4,17 @@ import torch.nn as nn
 
 def create_padding_mask(seq, pad_idx):
     """
-    Tạo mask để ignore padding tokens trong attention.
-    
+    Tạo padding mask cho attention.
+
     Args:
-        seq: [B, L] - Input sequence
+        seq: [B, L] - Input sequence (token ids)
         pad_idx: int - Index của padding token
-        
+
     Returns:
-        mask: [B, 1, 1, L] - Mask cho attention (1 = ignore, 0 = attend)
+        mask: [B, 1, 1, L]
+              Giá trị:
+                - 1.0 : token hợp lệ (được attend)
+                - 0.0 : padding token (bị mask / ignore)
     """
     # [B, L] -> [B, 1, 1, L]
     mask = (seq != pad_idx).unsqueeze(1).unsqueeze(2)
@@ -20,14 +23,17 @@ def create_padding_mask(seq, pad_idx):
 
 def create_causal_mask(seq_len, device='cpu'):
     """
-    Tạo causal mask để prevent attention to future tokens (cho decoder).
-    
+    Tạo causal (look-ahead) mask cho decoder self-attention.
+
     Args:
         seq_len: int - Độ dài sequence
-        device: str - Device để tạo tensor
-        
+        device: torch.device hoặc str
+
     Returns:
-        mask: [1, 1, seq_len, seq_len] - Upper triangular mask
+        mask: [1, 1, seq_len, seq_len]
+              Giá trị:
+                - 1.0 : được attend
+                - 0.0 : bị chặn (future tokens)
     """
     mask = torch.tril(torch.ones(seq_len, seq_len, device=device)).bool()
     return mask.unsqueeze(0).unsqueeze(0).float()
@@ -35,17 +41,23 @@ def create_causal_mask(seq_len, device='cpu'):
 
 def create_masks(src, tgt, pad_idx, device='cpu'):
     """
-    Tạo tất cả masks cần thiết cho Transformer.
-    
+    Tạo các mask cần thiết cho Transformer encoder-decoder.
+
     Args:
-        src: [B, S] - Source sequence
-        tgt: [B, T] - Target sequence
+        src: [B, S] - Source token ids
+        tgt: [B, T] - Target token ids
         pad_idx: int - Padding token index
-        device: str - Device
-        
+        device: torch.device hoặc str
+
     Returns:
-        src_mask: [B, 1, 1, S] - Padding mask cho encoder
-        tgt_mask: [B, 1, T, T] - Combined padding + causal mask cho decoder
+        src_mask: [B, 1, 1, S]
+                  (1 = attend, 0 = padding)
+
+        tgt_mask: [B, 1, T, T]
+                  Kết hợp:
+                    - padding mask
+                    - causal mask
+                  (1 = attend, 0 = masked)
     """
     # Source padding mask
     src_mask = create_padding_mask(src, pad_idx)

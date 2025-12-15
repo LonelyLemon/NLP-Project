@@ -9,7 +9,7 @@ class GreedySearchDecoder:
     Nhanh nhưng quality thấp hơn Beam Search.
     """
     
-    def __init__(self, model, max_len=100):
+    def __init__(self, model, max_len=100, use_subword=False):
         """
         Args:
             model: Trained Transformer model
@@ -17,6 +17,7 @@ class GreedySearchDecoder:
         """
         self.model = model
         self.max_len = max_len
+        self.use_subword = use_subword
     
     @torch.no_grad()
     def decode(self, src, src_vocab, tgt_vocab, device):
@@ -35,9 +36,14 @@ class GreedySearchDecoder:
         self.model.eval()
         
         src = src.to(device)
-        pad_idx = src_vocab.stoi['<pad>']
-        sos_idx = tgt_vocab.stoi['<sos>']
-        eos_idx = tgt_vocab.stoi['<eos>']
+        if self.use_subword:
+            pad_idx = src_vocab.pad_idx
+            sos_idx = src_vocab.sos_idx
+            eos_idx = src_vocab.eos_idx
+        else:
+            pad_idx = src_vocab.stoi['<pad>']
+            sos_idx = tgt_vocab.stoi['<sos>']
+            eos_idx = tgt_vocab.stoi['<eos>']
         
         # Encode source
         src_mask = create_padding_mask(src, pad_idx).to(device)
@@ -84,20 +90,32 @@ class GreedySearchDecoder:
             translation: str - Câu đã dịch
         """
         # Tokenize và convert sang tensor
-        src_tokens = src_sentence.split()
-        src_indices = [src_vocab.stoi.get(token, src_vocab.stoi['<unk>']) for token in src_tokens]
-        src_tensor = torch.LongTensor([src_indices]).to(device)  # [1, S]
+        if self.use_subword:
+            src_ids = (
+                [src_vocab.sos_idx]
+                + src_vocab.encode(src_sentence)
+                + [src_vocab.eos_idx]
+            )
+        else:
+            tokens = src_sentence.split()
+            src_ids = [
+                src_vocab.stoi.get(tok, src_vocab.stoi['<unk>'])
+                for tok in tokens
+            ]
+        src_tensor = torch.LongTensor([src_ids]).to(device)  # [1, S]
         
         # Decode
-        decoded_indices = self.decode(src_tensor, src_vocab, tgt_vocab, device)
+        decoded_ids = self.decode(src_tensor, src_vocab, tgt_vocab, device)
         
-        # Convert indices to words
-        decoded_words = [tgt_vocab.itos[idx] for idx in decoded_indices]
-        
-        # Remove <sos>, <eos>, <pad>
-        decoded_words = [w for w in decoded_words if w not in ['<sos>', '<eos>', '<pad>']]
-        
-        return ' '.join(decoded_words)
+        if self.use_subword:
+            return tgt_vocab.decode(decoded_ids)
+        else:
+            words = [
+                tgt_vocab.itos[i]
+                for i in decoded_ids
+                if tgt_vocab.itos[i] not in ['<sos>', '<eos>', '<pad>']
+            ]
+            return ' '.join(words)
 
 
 class BeamSearchDecoder:
@@ -106,7 +124,7 @@ class BeamSearchDecoder:
     Chậm hơn nhưng quality cao hơn Greedy Search.
     """
     
-    def __init__(self, model, beam_size=5, max_len=100, length_penalty=0.6):
+    def __init__(self, model, beam_size=5, max_len=100, length_penalty=0.6, use_subword=False):
         """
         Args:
             model: Trained Transformer model
@@ -119,6 +137,7 @@ class BeamSearchDecoder:
         self.beam_size = beam_size
         self.max_len = max_len
         self.length_penalty = length_penalty
+        self.use_subword = use_subword
     
     @torch.no_grad()
     def decode(self, src, src_vocab, tgt_vocab, device):
@@ -137,9 +156,14 @@ class BeamSearchDecoder:
         self.model.eval()
         
         src = src.to(device)
-        pad_idx = src_vocab.stoi['<pad>']
-        sos_idx = tgt_vocab.stoi['<sos>']
-        eos_idx = tgt_vocab.stoi['<eos>']
+        if self.use_subword:
+            pad_idx = src_vocab.pad_idx
+            sos_idx = tgt_vocab.sos_idx
+            eos_idx = tgt_vocab.eos_idx
+        else:
+            pad_idx = src_vocab.stoi['<pad>']
+            sos_idx = tgt_vocab.stoi['<sos>']
+            eos_idx = tgt_vocab.stoi['<eos>']
         
         # Encode source
         src_mask = create_padding_mask(src, pad_idx).to(device)
@@ -227,15 +251,29 @@ class BeamSearchDecoder:
             translation: str - Câu đã dịch
         """
         # Tokenize
-        src_tokens = src_sentence.split()
-        src_indices = [src_vocab.stoi.get(token, src_vocab.stoi['<unk>']) for token in src_tokens]
-        src_tensor = torch.LongTensor([src_indices]).to(device)
+        if self.use_subword:
+            src_ids = (
+                [src_vocab.sos_idx]
+                + src_vocab.encode(src_sentence)
+                + [src_vocab.eos_idx]
+            )
+        else:
+            tokens = src_sentence.split()
+            src_ids = [
+                src_vocab.stoi.get(tok, src_vocab.stoi['<unk>'])
+                for tok in tokens
+            ]
+        src_tensor = torch.LongTensor([src_ids]).to(device)
         
         # Decode
-        decoded_indices = self.decode(src_tensor, src_vocab, tgt_vocab, device)
+        decoded_ids = self.decode(src_tensor, src_vocab, tgt_vocab, device)
         
-        # Convert to words
-        decoded_words = [tgt_vocab.itos[idx] for idx in decoded_indices]
-        decoded_words = [w for w in decoded_words if w not in ['<sos>', '<eos>', '<pad>']]
-        
-        return ' '.join(decoded_words)
+        if self.use_subword:
+            return tgt_vocab.decode(decoded_ids)
+        else:
+            words = [
+                tgt_vocab.itos[i]
+                for i in decoded_ids
+                if tgt_vocab.itos[i] not in ['<sos>', '<eos>', '<pad>']
+            ]
+            return ' '.join(words)
