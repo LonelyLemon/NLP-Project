@@ -9,11 +9,12 @@ class Decoder(nn.Module):
         model_dim, 
         num_heads, 
         ff_hidden_dim=2048, 
-        dropout=0.1
+        dropout=0.1,
+        use_rope: bool = False
     ):
         super().__init__()
-        self.self_attn = MultiHeadAttention(model_dim, num_heads, dropout)
-        self.cross_attn = MultiHeadAttention(model_dim, num_heads, dropout)
+        self.self_attn = MultiHeadAttention(model_dim, num_heads, dropout, use_rope)
+        self.cross_attn = MultiHeadAttention(model_dim, num_heads, dropout, use_rope)
         self.ffn = FeedForward(model_dim, ff_hidden_dim, dropout)
 
         self.norm1 = nn.LayerNorm(model_dim)

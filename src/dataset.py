@@ -3,7 +3,7 @@ from torch.utils.data import Dataset
 from torch.nn.utils.rnn import pad_sequence
 from collections import Counter
 import re
-
+import sentencepiece as spm
 
 UNK_TOKEN = '<unk>'
 PAD_TOKEN = '<pad>'
@@ -43,6 +43,23 @@ class Vocabulary:
             for token in tokenized_text
         ]
 
+class SubwordVocabulary:
+    def __init__(self, spm_model_path):
+        self.sp = spm.SentencePieceProcessor()
+        self.sp.load(spm_model_path)
+
+        self.pad_idx = self.sp.pad_id()
+        self.sos_idx = self.sp.bos_id()
+        self.eos_idx = self.sp.eos_id()
+        self.unk_idx = self.sp.unk_id()
+    
+    def __len__(self):
+        return self.sp.get_piece_size()
+
+    def numericalize(self, text):
+        return self.sp.encode(text, out_type=int)
+
+
 class BilingualDataset(Dataset):
     def __init__(self, dataset, src_vocab, trg_vocab, src_lang='en', trg_lang='vi'):
         self.dataset = dataset
@@ -67,6 +84,32 @@ class BilingualDataset(Dataset):
         trg_numericalized.append(self.trg_vocab.stoi[EOS_TOKEN])
 
         return torch.tensor(src_numericalized), torch.tensor(trg_numericalized)
+
+class SpmBilingualDataset(Dataset):
+    def __init__(self, dataset, src_vocab, trg_vocab, src_lang='en', trg_lang='vi'):
+        self.dataset = dataset
+        self.src_vocab = src_vocab
+        self.trg_vocab = trg_vocab
+        self.src_lang = src_lang
+        self.trg_lang = trg_lang
+
+    def __len__(self):
+        return len(self.dataset)
+    
+    def __getitem__(self, idx):
+        src_ids = (
+            [self.src_vocab.sos_idx]
+            + self.src_vocab.encode(self.dataset[idx][self.src_lang])
+            + [self.src_vocab.eos_idx]
+        )
+
+        trg_ids = (
+            [self.trg_vocab.sos_idx]
+            + self.trg_vocab.encode(self.dataset[idx][self.trg_lang])
+            + [self.trg_vocab.eos_idx]
+        )
+
+        return torch.tensor(src_ids), torch.tensor(trg_ids)
 
 class Collate:
     def __init__(self, pad_idx):

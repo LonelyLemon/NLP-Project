@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 from .feed_forward import FeedForward
 from .multihead_attention import MultiHeadAttention
+from typing import Literal
+
 
 class Encoder(nn.Module):
     def __init__(
@@ -9,10 +11,11 @@ class Encoder(nn.Module):
         model_dim: int, 
         num_heads: int, 
         ff_hidden_dim=2048, 
-        dropout=0.1
+        dropout=0.1,
+        use_rope: bool = False
     ):
         super().__init__()
-        self.mha = MultiHeadAttention(model_dim, num_heads, dropout)
+        self.mha = MultiHeadAttention(model_dim, num_heads, dropout, use_rope)
         self.ffn = FeedForward(model_dim, ff_hidden_dim, dropout)
         self.norm1 = nn.LayerNorm(model_dim)
         self.norm2 = nn.LayerNorm(model_dim)

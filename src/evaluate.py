@@ -10,7 +10,7 @@ class Evaluator:
     Evaluator để đánh giá model translation quality với BLEU và ROUGE-L scores.
     """
     
-    def __init__(self, model, test_loader, src_vocab, tgt_vocab, device):
+    def __init__(self, model, test_loader, src_vocab, tgt_vocab, device, use_subword: bool = False):
         """
         Args:
             model: Trained Transformer model
@@ -24,8 +24,9 @@ class Evaluator:
         self.src_vocab = src_vocab
         self.tgt_vocab = tgt_vocab
         self.device = device
+        self.use_subword = use_subword
         
-        self.bleu_metric = BLEU()
+        self.bleu_metric = BLEU(tokenize='none' if use_subword else '13a')
         self.rouge_scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=False)
     
     def indices_to_sentence(self, indices, vocab, remove_special=True):
@@ -42,12 +43,11 @@ class Evaluator:
         """
         if torch.is_tensor(indices):
             indices = indices.tolist()
+        if self.use_subword:
+            return vocab.sp.decode_ids(indices)
         
         words = [vocab.itos[idx] for idx in indices]
-        
-        if remove_special:
-            words = [w for w in words if w not in ['<sos>', '<eos>', '<pad>', '<unk>']]
-        
+        words = [w for w in words if w not in ['<sos>', '<eos>', '<pad>']]
         return ' '.join(words)
     
     def evaluate_with_decoder(self, decoder, desc="Evaluation"):

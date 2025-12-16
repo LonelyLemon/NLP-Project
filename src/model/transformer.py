@@ -4,6 +4,7 @@ from .position_encoding import PositionalEncoding
 from .encoder import Encoder
 from .decoder import Decoder
 import math
+from typing import Literal
 
 class Transformer(nn.Module):
     def __init__(
@@ -16,23 +17,26 @@ class Transformer(nn.Module):
         num_dec_layers=6, 
         ff_hidden_dim=2048, 
         max_len=5000,
-        dropout=0.1
+        dropout=0.1,
+        pos_type: Literal['pos', 'rope'] = 'pos'
     ):
         super().__init__()
         self.model_dim = model_dim
+        self.pos_type = pos_type
         
         self.src_embedding = nn.Embedding(src_vocab_size, model_dim)
         self.tgt_embedding = nn.Embedding(tgt_vocab_size, model_dim)
-        self.positional_encoding = PositionalEncoding(model_dim, max_len)
+        if self.pos_type == 'pos':
+            self.positional_encoding = PositionalEncoding(model_dim, max_len)
         self.dropout = nn.Dropout(dropout)
         
         self.encoder_layers = nn.ModuleList([
-            Encoder(model_dim, num_heads, ff_hidden_dim, dropout)
+            Encoder(model_dim, num_heads, ff_hidden_dim, dropout, use_rope=(pos_type == 'rope'))
             for _ in range(num_enc_layers)
         ])
         
         self.decoder_layers = nn.ModuleList([
-            Decoder(model_dim, num_heads, ff_hidden_dim, dropout)
+            Decoder(model_dim, num_heads, ff_hidden_dim, dropout, use_rope=(pos_type=='rope'))
             for _ in range(num_dec_layers)
         ])
         
@@ -46,7 +50,8 @@ class Transformer(nn.Module):
         Returns: [B, S, D]
         """
         x = self.src_embedding(src) * math.sqrt(self.model_dim)
-        x = self.positional_encoding(x)
+        if self.pos_type == 'pos':
+            x = self.positional_encoding(x)
         x = self.dropout(x)
         
         for layer in self.encoder_layers:
@@ -63,7 +68,8 @@ class Transformer(nn.Module):
         Returns: [B, T, D]
         """
         x = self.tgt_embedding(tgt) * math.sqrt(self.model_dim)
-        x = self.positional_encoding(x)
+        if self.pos_type == 'pos':
+            x = self.positional_encoding(x)
         x = self.dropout(x)
         
         for layer in self.decoder_layers:
