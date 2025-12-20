@@ -8,7 +8,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from datasets import load_dataset
 
-from src.dataset import Vocabulary, BilingualDataset, Collate, PAD_TOKEN, SubwordVocabulary, SpmBilingualDataset
+from src.dataset import Vocabulary, BilingualDataset, Collate, SubwordVocabulary, SpmBilingualDataset
 from src.model.transformer import Transformer
 from src.train import Trainer, create_optimizer, create_scheduler, WarmupScheduler
 from src.inference import GreedySearchDecoder, BeamSearchDecoder
