@@ -53,6 +53,10 @@ def main(config):
 
         'beam_size': 5,
         'length_penalty': 0.6,
+
+        'model_path': None,
+        'spm_en_path': None,
+        'spm_vi_path': None
     }
 
     for key, value in CONFIG.items():
@@ -97,23 +101,25 @@ def main(config):
             f_en.write(x["en"].strip() + "\n")
             f_vi.write(x["vi"].strip() + "\n")
     
-    spm.SentencePieceTrainer.train(
-        input="temp_train.en",
-        model_prefix="spm_en",
-        vocab_size=CONFIG['vocab_size_en'],
-        model_type=CONFIG['vocab_model_type'],
-        character_coverage=1.0,
-        pad_id=0, bos_id=1, eos_id=2, unk_id=3
-    )
+    if not CONFIG['spm_en_path']:
+        spm.SentencePieceTrainer.train(
+            input="temp_train.en",
+            model_prefix="spm_en",
+            vocab_size=CONFIG['vocab_size_en'],
+            model_type=CONFIG['vocab_model_type'],
+            character_coverage=1.0,
+            pad_id=0, bos_id=1, eos_id=2, unk_id=3
+        )
 
-    spm.SentencePieceTrainer.train(
-        input="temp_train.vi",
-        model_prefix="spm_vi",
-        vocab_size=CONFIG['vocab_size_vi'],
-        model_type=CONFIG['vocab_model_type'],
-        character_coverage=0.9995,
-        pad_id=0, bos_id=1, eos_id=2, unk_id=3
-    )
+    if not CONFIG['spm_vi_path']:
+        spm.SentencePieceTrainer.train(
+            input="temp_train.vi",
+            model_prefix="spm_vi",
+            vocab_size=CONFIG['vocab_size_vi'],
+            model_type=CONFIG['vocab_model_type'],
+            character_coverage=0.9995,
+            pad_id=0, bos_id=1, eos_id=2, unk_id=3
+        )
     os.remove("temp_train.en")
     os.remove("temp_train.vi")
     
@@ -305,44 +311,52 @@ def main(config):
     
     # ==================== 6. TRAINING ====================
     
-    trainer = Trainer(
-        model=model,
-        train_loader=train_loader,
-        val_loader=val_loader,
-        optimizer=optimizer,
-        criterion=criterion,
-        device=device,
-        src_pad_idx=src_pad_idx,
-        trg_pad_idx=trg_pad_idx,
-        checkpoint_dir='checkpoints',
-        log_dir='logs'
-    )
-    
-    trainer.train(
-        num_epochs=CONFIG['num_epochs'],
-        warmup_scheduler=warmup_scheduler,
-        plateau_scheduler=plateau_scheduler,
-        patience=CONFIG['patience']
-    )
+    if not CONFIG['model_path']:
+        trainer = Trainer(
+            model=model,
+            train_loader=train_loader,
+            val_loader=val_loader,
+            optimizer=optimizer,
+            criterion=criterion,
+            device=device,
+            src_pad_idx=src_pad_idx,
+            trg_pad_idx=trg_pad_idx,
+            checkpoint_dir='checkpoints',
+            log_dir='logs'
+        )
+        
+        trainer.train(
+            num_epochs=CONFIG['num_epochs'],
+            warmup_scheduler=warmup_scheduler,
+            plateau_scheduler=plateau_scheduler,
+            patience=CONFIG['patience']
+        )
     
     # ==================== 7. LOAD BEST MODEL ====================
     
-    print("\n" + "="*60)
-    print("📦 LOADING BEST MODEL")
-    print("="*60)
-    
-    checkpoint = torch.load('checkpoints/best_model.pt', map_location=device)
-    model.load_state_dict(checkpoint['model_state_dict'])
-    
-    print(f"  Best epoch: {checkpoint['epoch']}")
-    print(f"  Best val loss: {checkpoint['val_loss']:.4f}")
-    print("="*60 + "\n")
-    
-    # ==================== 8. INFERENCE & EVALUATION ====================
-    
-    print("\n" + "="*60)
-    print("🔍 INFERENCE & EVALUATION")
-    print("="*60 + "\n")
+        print("\n" + "="*60)
+        print("📦 LOADING BEST MODEL")
+        print("="*60)
+        
+        checkpoint = torch.load('checkpoints/best_model.pt', map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        
+        print(f"  Best epoch: {checkpoint['epoch']}")
+        print(f"  Best val loss: {checkpoint['val_loss']:.4f}")
+        print("="*60 + "\n")
+        
+        # ==================== 8. INFERENCE & EVALUATION ====================
+        
+        print("\n" + "="*60)
+        print("🔍 INFERENCE & EVALUATION")
+        print("="*60 + "\n")
+    else:
+        print("\n" + "="*60)
+        print("📦 LOADING PRETRAIN MODEL")
+        print("="*60)
+
+        checkpoint = torch.load(CONFIG['model_path'], map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
     
     # Create decoders
     greedy_decoder = GreedySearchDecoder(model, max_len=100, use_subword=CONFIG['use_subword'])
