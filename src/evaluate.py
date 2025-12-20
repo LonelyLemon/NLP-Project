@@ -47,7 +47,7 @@ class Evaluator:
                     pred_indices = decoder.decode(src, self.src_vocab, self.tgt_vocab, self.device)
                     
                     # Convert to sentences
-                    pred_sentence = self.tgt_vocab.decode(pred_indices)
+                    pred_sentence = self.tgt_vocab.decode(pred_indices, raw_src)
                     ref_sentence = raw_tgt
                     src_sentence = raw_src
                     

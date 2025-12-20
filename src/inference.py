@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 from src.utils import create_padding_mask, create_causal_mask
+from src.data_processor import preprocess_text
 
 
 class GreedySearchDecoder:    
@@ -36,16 +37,17 @@ class GreedySearchDecoder:
         return decoded_tokens
     
     def translate(self, src_sentence, src_vocab, tgt_vocab, device):
+        sent = preprocess_text(src_sentence)
         src_ids = (
             [src_vocab.sos_idx]
-            + src_vocab.numericalize(src_sentence)
+            + src_vocab.numericalize(sent)
             + [src_vocab.eos_idx]
         )
         src_tensor = torch.LongTensor([src_ids]).to(device)  # [1, S]
 
         decoded_ids = self.decode(src_tensor, src_vocab, tgt_vocab, device)
         
-        return tgt_vocab.decode(decoded_ids)
+        return tgt_vocab.decode(decoded_ids, src_sentence)
 
 
 class BeamSearchDecoder:
@@ -134,13 +136,14 @@ class BeamSearchDecoder:
             return beams[0][1] if beams else [sos_idx, eos_idx]
     
     def translate(self, src_sentence, src_vocab, tgt_vocab, device):
+        sent = preprocess_text(src_sentence)
         src_ids = (
             [src_vocab.sos_idx]
-            + src_vocab.numericalize(src_sentence)
+            + src_vocab.numericalize(sent)
             + [src_vocab.eos_idx]
         )
         src_tensor = torch.LongTensor([src_ids]).to(device)
 
         decoded_ids = self.decode(src_tensor, src_vocab, tgt_vocab, device)
 
-        return tgt_vocab.decode(decoded_ids)
+        return tgt_vocab.decode(decoded_ids, src_sentence)

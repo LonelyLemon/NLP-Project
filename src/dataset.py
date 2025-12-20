@@ -49,10 +49,10 @@ class Vocabulary:
             for token in tokenized_text
         ]
     
-    def decode(self, indices):
+    def decode(self, indices, raw_src):
         tokens = [self.itos.get(idx, '') for idx in indices if idx not in [self.pad_idx, self.eos_idx, self.sos_idx, self.unk_idx]]
         seq = ' '.join(tokens)
-        return postprocess_text(seq)
+        return postprocess_text(raw_input=raw_src, pred=seq)
         
 
 class SubwordVocabulary:
@@ -71,9 +71,9 @@ class SubwordVocabulary:
     def numericalize(self, text):
         return self.sp.encode(text, out_type=int)
 
-    def decode(self, indices):
+    def decode(self, indices, raw_src):
         seq = self.sp.decode_ids(indices)
-        return postprocess_text(seq)
+        return postprocess_text(raw_input=raw_src, pred=seq)
 
 
 class BilingualDataset(Dataset):
