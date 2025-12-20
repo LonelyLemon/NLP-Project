@@ -5,8 +5,7 @@ from tqdm import tqdm
 import json
 import os
 from pathlib import Path
-
-from .utils import create_masks, save_checkpoint, count_parameters
+from src.utils import create_masks, save_checkpoint, count_parameters
 
 
 class Trainer:
@@ -18,31 +17,19 @@ class Trainer:
         optimizer,
         criterion,
         device,
-        pad_idx,
+        src_pad_idx,
+        trg_pad_idx,
         checkpoint_dir='checkpoints',
         log_dir='logs'
     ):
-        """
-        Trainer class cho Transformer model.
-        
-        Args:
-            model: Transformer model
-            train_loader: DataLoader cho training
-            val_loader: DataLoader cho validation
-            optimizer: Optimizer (Adam)
-            criterion: Loss function (CrossEntropyLoss)
-            device: torch.device
-            pad_idx: Padding token index
-            checkpoint_dir: Thư mục lưu checkpoints
-            log_dir: Thư mục lưu logs
-        """
         self.model = model.to(device)
         self.train_loader = train_loader
         self.val_loader = val_loader
         self.optimizer = optimizer
         self.criterion = criterion
         self.device = device
-        self.pad_idx = pad_idx
+        self.src_pad_idx = src_pad_idx
+        self.trg_pad_idx = trg_pad_idx
         
         # Create directories
         self.checkpoint_dir = Path(checkpoint_dir)
@@ -60,20 +47,11 @@ class Trainer:
         self.best_val_loss = float('inf')
         
     def train_epoch(self, epoch, warmup_scheduler=None):
-        """
-        Train một epoch.
-        
-        Args:
-            warmup_scheduler: WarmupScheduler - Warmup scheduler (optional)
-        
-        Returns:
-            avg_loss: float - Average training loss
-        """
         self.model.train()
         total_loss = 0
         
         pbar = tqdm(self.train_loader, desc=f'Epoch {epoch} [Train]')
-        for batch_idx, (src, tgt) in enumerate(pbar):
+        for batch_idx, (raw_src, src, raw_tgt, tgt) in enumerate(pbar):
             src = src.to(self.device)  # [B, S]
             tgt = tgt.to(self.device)  # [B, T]
             
@@ -84,7 +62,7 @@ class Trainer:
             tgt_output = tgt[:, 1:]  # [B, T-1]
             
             # Create masks
-            src_mask, tgt_mask = create_masks(src, tgt_input, self.pad_idx, self.device)
+            src_mask, tgt_mask = create_masks(src, tgt_input, self.src_pad_idx, self.trg_pad_idx, self.device)
             
             # Forward pass
             self.optimizer.zero_grad()
@@ -136,14 +114,14 @@ class Trainer:
         total_loss = 0
         
         pbar = tqdm(self.val_loader, desc=f'Epoch {epoch} [Val]  ')
-        for src, tgt in pbar:
+        for raw_src, src, raw_tgt, tgt in pbar:
             src = src.to(self.device)
             tgt = tgt.to(self.device)
             
             tgt_input = tgt[:, :-1]
             tgt_output = tgt[:, 1:]
             
-            src_mask, tgt_mask = create_masks(src, tgt_input, self.pad_idx, self.device)
+            src_mask, tgt_mask = create_masks(src, tgt_input, self.src_pad_idx, self.trg_pad_idx, self.device)
             
             logits = self.model(src, tgt_input, src_mask, tgt_mask)
             
@@ -159,15 +137,6 @@ class Trainer:
         return avg_loss
     
     def train(self, num_epochs, warmup_scheduler=None, plateau_scheduler=None, patience=5):
-        """
-        Training loop chính.
-        
-        Args:
-            num_epochs: int - Số epochs
-            warmup_scheduler: WarmupScheduler - Warmup scheduler (optional)
-            plateau_scheduler: ReduceLROnPlateau - Plateau scheduler (optional)
-            patience: int - Early stopping patience
-        """
         print("\n" + "="*60)
         print("🚀 BẮT ĐẦU TRAINING")
         print("="*60)
@@ -271,9 +240,9 @@ def create_optimizer(model, learning_rate=1e-4, betas=(0.9, 0.98), eps=1e-9, wei
         weight_decay: float - L2 regularization
         
     Returns:
-        optimizer: torch.optim.Adam
+        optimizer: torch.optim.AdamW
     """
-    return torch.optim.Adam(
+    return torch.optim.AdamW(
         model.parameters(),
         lr=learning_rate,
         betas=betas,

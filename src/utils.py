@@ -3,73 +3,21 @@ import torch.nn as nn
 
 
 def create_padding_mask(seq, pad_idx):
-    """
-    Tạo padding mask cho attention.
-
-    Args:
-        seq: [B, L] - Input sequence (token ids)
-        pad_idx: int - Index của padding token
-
-    Returns:
-        mask: [B, 1, 1, L]
-              Giá trị:
-                - 1.0 : token hợp lệ (được attend)
-                - 0.0 : padding token (bị mask / ignore)
-    """
     # [B, L] -> [B, 1, 1, L]
     mask = (seq != pad_idx).unsqueeze(1).unsqueeze(2)
     return mask.float()
 
 
 def create_causal_mask(seq_len, device='cpu'):
-    """
-    Tạo causal (look-ahead) mask cho decoder self-attention.
-
-    Args:
-        seq_len: int - Độ dài sequence
-        device: torch.device hoặc str
-
-    Returns:
-        mask: [1, 1, seq_len, seq_len]
-              Giá trị:
-                - 1.0 : được attend
-                - 0.0 : bị chặn (future tokens)
-    """
     mask = torch.tril(torch.ones(seq_len, seq_len, device=device)).bool()
     return mask.unsqueeze(0).unsqueeze(0).float()
 
 
-def create_masks(src, tgt, pad_idx, device='cpu'):
-    """
-    Tạo các mask cần thiết cho Transformer encoder-decoder.
-
-    Args:
-        src: [B, S] - Source token ids
-        tgt: [B, T] - Target token ids
-        pad_idx: int - Padding token index
-        device: torch.device hoặc str
-
-    Returns:
-        src_mask: [B, 1, 1, S]
-                  (1 = attend, 0 = padding)
-
-        tgt_mask: [B, 1, T, T]
-                  Kết hợp:
-                    - padding mask
-                    - causal mask
-                  (1 = attend, 0 = masked)
-    """
-    # Source padding mask
-    src_mask = create_padding_mask(src, pad_idx)
-    
-    # Target padding mask
-    tgt_padding_mask = create_padding_mask(tgt, pad_idx)  # [B, 1, 1, T]
-    
-    # Target causal mask
+def create_masks(src, tgt, src_pad_idx, trg_pad_idx, device='cpu'):
+    src_mask = create_padding_mask(src, src_pad_idx)
+    tgt_padding_mask = create_padding_mask(tgt, trg_pad_idx)  # [B, 1, 1, T]
     tgt_len = tgt.size(1)
     tgt_causal_mask = create_causal_mask(tgt_len, device)  # [1, 1, T, T]
-    
-    # Combine: padding mask OR causal mask
     tgt_padding_mask = tgt_padding_mask.expand(-1, -1, tgt_len, -1)
     tgt_mask = tgt_padding_mask * tgt_causal_mask  # [B, 1, T, T]
     
@@ -77,17 +25,6 @@ def create_masks(src, tgt, pad_idx, device='cpu'):
 
 
 def save_checkpoint(model, optimizer, epoch, train_loss, val_loss, filepath):
-    """
-    Lưu model checkpoint.
-    
-    Args:
-        model: nn.Module - Model cần lưu
-        optimizer: Optimizer
-        epoch: int - Current epoch
-        train_loss: float - Training loss
-        val_loss: float - Validation loss
-        filepath: str - Đường dẫn lưu file
-    """
     checkpoint = {
         'epoch': epoch,
         'model_state_dict': model.state_dict(),
@@ -100,20 +37,6 @@ def save_checkpoint(model, optimizer, epoch, train_loss, val_loss, filepath):
 
 
 def load_checkpoint(filepath, model, optimizer=None, device='cpu'):
-    """
-    Load model checkpoint.
-    
-    Args:
-        filepath: str - Đường dẫn file checkpoint
-        model: nn.Module - Model để load weights
-        optimizer: Optimizer (optional) - Optimizer để load state
-        device: str - Device
-        
-    Returns:
-        epoch: int - Epoch đã train
-        train_loss: float
-        val_loss: float
-    """
     checkpoint = torch.load(filepath, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
     
@@ -127,16 +50,6 @@ def load_checkpoint(filepath, model, optimizer=None, device='cpu'):
 
 
 def count_parameters(model):
-    """
-    Đếm số lượng parameters của model.
-    
-    Args:
-        model: nn.Module
-        
-    Returns:
-        total: int - Tổng số parameters
-        trainable: int - Số parameters có thể train
-    """
     total = sum(p.numel() for p in model.parameters())
     trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     return total, trainable

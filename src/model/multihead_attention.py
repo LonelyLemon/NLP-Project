@@ -19,7 +19,7 @@ class MultiHeadAttention(nn.Module):
         self.use_rope = use_rope
 
         if use_rope:
-            self.rope = RoPE(model_dim)
+            self.rope = RoPE(self.head_dim)
 
         self.Q_linear = nn.Linear(model_dim, model_dim)
         self.K_linear = nn.Linear(model_dim, model_dim)
@@ -50,6 +50,11 @@ class MultiHeadAttention(nn.Module):
         Q = Q.view(B, L_q, self.num_heads, self.head_dim).transpose(1, 2)
         K = K.view(B, L_k, self.num_heads, self.head_dim).transpose(1, 2)
         V = V.view(B, L_v, self.num_heads, self.head_dim).transpose(1, 2)
+
+        if self.use_rope:
+            B, H, L, D = Q.shape
+            Q = self.rope(Q.reshape(B * H, L, D)).reshape(B, H, L, D)
+            K = self.rope(K.reshape(B * H, L, D)).reshape(B, H ,L, D)
 
         # [B, num_heads, L, L]
         scores = torch.matmul(Q, K.transpose(-2, -1)) / math.sqrt(self.head_dim)

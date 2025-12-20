@@ -6,19 +6,7 @@ import numpy as np
 
 
 class Evaluator:
-    """
-    Evaluator để đánh giá model translation quality với BLEU và ROUGE-L scores.
-    """
-    
     def __init__(self, model, test_loader, src_vocab, tgt_vocab, device, use_subword: bool = False):
-        """
-        Args:
-            model: Trained Transformer model
-            test_loader: DataLoader cho test set
-            src_vocab: Source vocabulary
-            tgt_vocab: Target vocabulary
-            device: torch.device
-        """
         self.model = model
         self.test_loader = test_loader
         self.src_vocab = src_vocab
@@ -28,39 +16,9 @@ class Evaluator:
         
         self.bleu_metric = BLEU(tokenize='none' if use_subword else '13a')
         self.rouge_scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=False)
-    
-    def indices_to_sentence(self, indices, vocab, remove_special=True):
-        """
-        Convert token indices sang sentence string.
-        
-        Args:
-            indices: list or tensor - Token indices
-            vocab: Vocabulary object
-            remove_special: bool - Remove special tokens (<sos>, <eos>, <pad>)
-            
-        Returns:
-            sentence: str
-        """
-        if torch.is_tensor(indices):
-            indices = indices.tolist()
-        if self.use_subword:
-            return vocab.sp.decode_ids(indices)
-        
-        words = [vocab.itos[idx] for idx in indices]
-        words = [w for w in words if w not in ['<sos>', '<eos>', '<pad>']]
-        return ' '.join(words)
+
     
     def evaluate_with_decoder(self, decoder, desc="Evaluation"):
-        """
-        Evaluate model sử dụng decoder cụ thể (Greedy hoặc Beam Search).
-        
-        Args:
-            decoder: GreedySearchDecoder hoặc BeamSearchDecoder instance
-            desc: str - Description cho progress bar
-            
-        Returns:
-            results: dict - Contains BLEU, ROUGE-L scores và examples
-        """
         self.model.eval()
         
         references = []  # Ground truth translations
@@ -76,20 +34,22 @@ class Evaluator:
         print(f"{'='*60}\n")
         
         with torch.no_grad():
-            for batch_idx, (src_batch, tgt_batch) in enumerate(tqdm(self.test_loader, desc=desc)):
+            for batch_idx, (raw_src_batch, src_batch, raw_tgt_batch, tgt_batch) in enumerate(tqdm(self.test_loader, desc=desc)):
                 batch_size = src_batch.size(0)
                 
                 for i in range(batch_size):
+                    raw_src = raw_src_batch[i]
                     src = src_batch[i:i+1]  # [1, S]
+                    raw_tgt = raw_tgt_batch[i]
                     tgt = tgt_batch[i]  # [T]
                     
                     # Decode
                     pred_indices = decoder.decode(src, self.src_vocab, self.tgt_vocab, self.device)
                     
                     # Convert to sentences
-                    pred_sentence = self.indices_to_sentence(pred_indices, self.tgt_vocab)
-                    ref_sentence = self.indices_to_sentence(tgt, self.tgt_vocab)
-                    src_sentence = self.indices_to_sentence(src[0], self.src_vocab)
+                    pred_sentence = self.tgt_vocab.decode(pred_indices)
+                    ref_sentence = raw_tgt
+                    src_sentence = raw_src
                     
                     # Collect for metrics
                     hypotheses.append(pred_sentence)
@@ -143,16 +103,6 @@ class Evaluator:
         return results
     
     def compare_decoders(self, greedy_decoder, beam_decoder):
-        """
-        So sánh Greedy Search vs Beam Search.
-        
-        Args:
-            greedy_decoder: GreedySearchDecoder instance
-            beam_decoder: BeamSearchDecoder instance
-            
-        Returns:
-            comparison: dict - Results từ cả 2 decoders
-        """
         print("\n" + "="*60)
         print("🔍 COMPARING DECODING STRATEGIES")
         print("="*60)

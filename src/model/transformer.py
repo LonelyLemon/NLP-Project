@@ -16,7 +16,8 @@ class Transformer(nn.Module):
         num_enc_layers=6, 
         num_dec_layers=6, 
         ff_hidden_dim=2048, 
-        max_len=5000,
+        max_len_src=150,
+        max_len_trg=180,
         dropout=0.1,
         pos_type: Literal['pos', 'rope'] = 'pos'
     ):
@@ -27,7 +28,8 @@ class Transformer(nn.Module):
         self.src_embedding = nn.Embedding(src_vocab_size, model_dim)
         self.tgt_embedding = nn.Embedding(tgt_vocab_size, model_dim)
         if self.pos_type == 'pos':
-            self.positional_encoding = PositionalEncoding(model_dim, max_len)
+            self.encoder_pe = PositionalEncoding(model_dim, max_len_src)
+            self.decoder_pe = PositionalEncoding(model_dim, max_len_trg)
         self.dropout = nn.Dropout(dropout)
         
         self.encoder_layers = nn.ModuleList([
@@ -51,7 +53,7 @@ class Transformer(nn.Module):
         """
         x = self.src_embedding(src) * math.sqrt(self.model_dim)
         if self.pos_type == 'pos':
-            x = self.positional_encoding(x)
+            x = self.encoder_pe(x)
         x = self.dropout(x)
         
         for layer in self.encoder_layers:
@@ -69,7 +71,7 @@ class Transformer(nn.Module):
         """
         x = self.tgt_embedding(tgt) * math.sqrt(self.model_dim)
         if self.pos_type == 'pos':
-            x = self.positional_encoding(x)
+            x = self.decoder_pe(x)
         x = self.dropout(x)
         
         for layer in self.decoder_layers:

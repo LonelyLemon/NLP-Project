@@ -8,50 +8,56 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from datasets import load_dataset
 
-from src.dataset import Vocabulary, BilingualDataset, Collate, PAD_TOKEN
+from src.dataset import Vocabulary, BilingualDataset, Collate, PAD_TOKEN, SubwordVocabulary, SpmBilingualDataset
 from src.model.transformer import Transformer
 from src.train import Trainer, create_optimizer, create_scheduler, WarmupScheduler
 from src.inference import GreedySearchDecoder, BeamSearchDecoder
 from src.evaluate import Evaluator
 from src.visualization import generate_all_plots
+from src.data_processor import preprocess_dataset
+import os
+import sentencepiece as spm
 
-
-def main():
-    # ==================== CONFIGURATION ====================
-    
-    # Device
+def main(config):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"\n🖥️  Device: {device}")
-    
-    # Hyperparameters
+
     CONFIG = {
-        # Model
+        'src': 'en',
+        'trg': 'vi',
+        'use_subword': True,
+        'use_rope': True,
+        'vocab_size_en': 12000,
+        'vocab_size_vi': 7000,
+        'vocab_model_type': 'unigram',
+        'num_workers': 4,
+
         'model_dim': 384,
         'num_heads': 6,
         'num_enc_layers': 4,
         'num_dec_layers': 4,
         'ff_hidden_dim': 1536,
         'dropout': 0.1,
-        'max_len': 5000,
+        'max_len_en': 150,
+        'max_len_vi': 180,
         
-        # Training
         'batch_size': 8,
         'num_epochs': 20,
-        'learning_rate': 5e-5,  # Reduced to prevent NaN loss
+        'learning_rate': 5e-5,
         'weight_decay': 1e-5,
-        'warmup_steps': 4000,  # Warmup for stable training
+        'warmup_steps': 4000,
         'patience': 5,  # Early stopping
+
+        'freq_threshold': 2,
         
-        # Data
-        'freq_threshold': 2,  # Minimum word frequency
-        'train_split': 'train[:80%]',
-        'val_split': 'train[80%:90%]',
-        'test_split': 'train[90%:]',
-        
-        # Inference
+
         'beam_size': 5,
         'length_penalty': 0.6,
     }
+
+    for key, value in CONFIG.items():
+        if key in config:
+            CONFIG[key] = config[key]
     
     print("\n" + "="*60)
     print("⚙️  CONFIGURATION")
@@ -65,10 +71,14 @@ def main():
     print("\n" + "="*60)
     print("📥 LOADING IWSLT2015 DATASET")
     print("="*60)
+    dataset = load_dataset('thainq107/iwslt2015-en-vi')
+    train_dataset = dataset['train']
+    val_dataset = dataset['validation']
+    test_dataset = dataset['test']
     
-    train_dataset = load_dataset("thainq107/iwslt2015-en-vi", split=CONFIG['train_split'])
-    val_dataset = load_dataset("thainq107/iwslt2015-en-vi", split=CONFIG['val_split'])
-    test_dataset = load_dataset("thainq107/iwslt2015-en-vi", split=CONFIG['test_split'])
+    train_dataset = preprocess_dataset(train_dataset)
+    val_dataset = preprocess_dataset(val_dataset)
+    test_dataset = preprocess_dataset(test_dataset)
     
     print(f"  Train samples: {len(train_dataset):,}")
     print(f"  Val samples:   {len(val_dataset):,}")
@@ -80,19 +90,46 @@ def main():
     print("\n" + "="*60)
     print("📚 BUILDING VOCABULARY")
     print("="*60)
+
+    with open("temp_train.en", "w", encoding="utf-8") as f_en, \
+     open("temp_train.vi", "w", encoding="utf-8") as f_vi:
+        for x in train_dataset:
+            f_en.write(x["en"].strip() + "\n")
+            f_vi.write(x["vi"].strip() + "\n")
     
-    src_sentences = [x['en'] for x in train_dataset]
-    trg_sentences = [x['vi'] for x in train_dataset]
+    spm.SentencePieceTrainer.train(
+        input="temp_train.en",
+        model_prefix="spm_en",
+        vocab_size=CONFIG['vocab_size_en'],
+        model_type=CONFIG['vocab_model_type'],
+        character_coverage=1.0,
+        pad_id=0, bos_id=1, eos_id=2, unk_id=3
+    )
+
+    spm.SentencePieceTrainer.train(
+        input="temp_train.vi",
+        model_prefix="spm_vi",
+        vocab_size=CONFIG['vocab_size_vi'],
+        model_type=CONFIG['vocab_model_type'],
+        character_coverage=0.9995,
+        pad_id=0, bos_id=1, eos_id=2, unk_id=3
+    )
+    os.remove("temp_train.en")
+    os.remove("temp_train.vi")
     
-    src_vocab = Vocabulary(freq_threshold=CONFIG['freq_threshold'])
-    src_vocab.build_vocabulary(src_sentences)
+    src_sentences = [x[CONFIG['src']] for x in train_dataset]
+    trg_sentences = [x[CONFIG['trg']] for x in train_dataset]
     
-    trg_vocab = Vocabulary(freq_threshold=CONFIG['freq_threshold'])
-    trg_vocab.build_vocabulary(trg_sentences)
+    if CONFIG['use_subword']:
+        src_vocab = SubwordVocabulary(f"spm_{CONFIG['src']}.model")
+        trg_vocab = SubwordVocabulary(f"spm_{CONFIG['trg']}.model")
+    else:
+        src_vocab = Vocabulary(freq_threshold=CONFIG['freq_threshold'])
+        src_vocab.build_vocabulary(src_sentences)
+        
+        trg_vocab = Vocabulary(freq_threshold=CONFIG['freq_threshold'])
+        trg_vocab.build_vocabulary(trg_sentences)
     
-    print(f"  English vocab size: {len(src_vocab):,}")
-    print(f"  Vietnamese vocab size: {len(trg_vocab):,}")
-    print("="*60 + "\n")
     
     # ==================== 3. CREATE DATALOADERS ====================
     
@@ -100,34 +137,102 @@ def main():
     print("🔄 CREATING DATALOADERS")
     print("="*60)
     
-    pad_idx = src_vocab.stoi[PAD_TOKEN]
+    if CONFIG['use_subword']:
+        train_data = SpmBilingualDataset(
+            train_dataset, 
+            src_vocab=src_vocab, 
+            trg_vocab=trg_vocab, 
+            max_src_len=CONFIG[f"max_len_{CONFIG['src']}"],
+            max_trg_len=CONFIG[f"max_len_{CONFIG['trg']}"],
+            src_lang=CONFIG['src'], 
+            trg_lang=CONFIG['trg']
+        )
+        val_data = SpmBilingualDataset(
+            val_dataset, 
+            src_vocab=src_vocab, 
+            trg_vocab=trg_vocab, 
+            max_src_len=CONFIG[f"max_len_{CONFIG['src']}"],
+            max_trg_len=CONFIG[f"max_len_{CONFIG['trg']}"],
+            src_lang=CONFIG['src'], 
+            trg_lang=CONFIG['trg']
+        )
+        test_data = SpmBilingualDataset(
+            test_dataset, 
+            src_vocab=src_vocab, 
+            trg_vocab=trg_vocab, 
+            max_src_len=CONFIG[f"max_len_{CONFIG['src']}"],
+            max_trg_len=CONFIG[f"max_len_{CONFIG['trg']}"],
+            src_lang=CONFIG['src'], 
+            trg_lang=CONFIG['trg']
+        )
+    else:
+        train_data = BilingualDataset(
+            train_dataset, 
+            src_vocab=src_vocab, 
+            trg_vocab=trg_vocab, 
+            max_src_len=CONFIG[f"max_len_{CONFIG['src']}"],
+            max_trg_len=CONFIG[f"max_len_{CONFIG['trg']}"],
+            src_lang=CONFIG['src'], 
+            trg_lang=CONFIG['trg']
+        )
+        val_data = BilingualDataset(
+            val_dataset, 
+            src_vocab=src_vocab, 
+            trg_vocab=trg_vocab, 
+            max_src_len=CONFIG[f"max_len_{CONFIG['src']}"],
+            max_trg_len=CONFIG[f"max_len_{CONFIG['trg']}"],
+            src_lang=CONFIG['src'], 
+            trg_lang=CONFIG['trg']
+        )
+        test_data = BilingualDataset(
+            test_dataset, 
+            src_vocab=src_vocab, 
+            trg_vocab=trg_vocab, 
+            max_src_len=CONFIG[f"max_len_{CONFIG['src']}"],
+            max_trg_len=CONFIG[f"max_len_{CONFIG['trg']}"],
+            src_lang=CONFIG['src'], 
+            trg_lang=CONFIG['trg']
+        )
     
-    train_data = BilingualDataset(train_dataset, src_vocab, trg_vocab)
-    val_data = BilingualDataset(val_dataset, src_vocab, trg_vocab)
-    test_data = BilingualDataset(test_dataset, src_vocab, trg_vocab)
-    
+    src_pad_idx = src_vocab.pad_idx
+    trg_pad_idx = trg_vocab.pad_idx
     train_loader = DataLoader(
         train_data,
         batch_size=CONFIG['batch_size'],
         shuffle=True,
-        collate_fn=Collate(pad_idx=pad_idx),
-        num_workers=0  # Windows compatibility
+        collate_fn=Collate(
+            src_pad_idx=src_pad_idx,
+            trg_pad_idx=trg_pad_idx, 
+            max_src_len=CONFIG[f"max_len_{CONFIG['src']}"],
+            max_trg_len=CONFIG[f"max_len_{CONFIG['trg']}"]
+        ),
+        num_workers=CONFIG['num_workers']
     )
     
     val_loader = DataLoader(
         val_data,
         batch_size=CONFIG['batch_size'],
         shuffle=False,
-        collate_fn=Collate(pad_idx=pad_idx),
-        num_workers=0
+        collate_fn=Collate(
+            src_pad_idx=src_pad_idx,
+            trg_pad_idx=trg_pad_idx, 
+            max_src_len=CONFIG[f"max_len_{CONFIG['src']}"],
+            max_trg_len=CONFIG[f"max_len_{CONFIG['trg']}"]
+        ),
+        num_workers=CONFIG['num_workers']
     )
     
     test_loader = DataLoader(
         test_data,
-        batch_size=1,  # For inference
+        batch_size=1,
         shuffle=False,
-        collate_fn=Collate(pad_idx=pad_idx),
-        num_workers=0
+        collate_fn=Collate(
+            src_pad_idx=src_pad_idx,
+            trg_pad_idx=trg_pad_idx, 
+            max_src_len=CONFIG[f"max_len_{CONFIG['src']}"],
+            max_trg_len=CONFIG[f"max_len_{CONFIG['trg']}"]
+        ),
+        num_workers=CONFIG['num_workers']
     )
     
     print(f"  Train batches: {len(train_loader)}")
@@ -149,7 +254,8 @@ def main():
         num_enc_layers=CONFIG['num_enc_layers'],
         num_dec_layers=CONFIG['num_dec_layers'],
         ff_hidden_dim=CONFIG['ff_hidden_dim'],
-        max_len=CONFIG['max_len'],
+        max_len_src=CONFIG[f"max_len_{CONFIG['src']}"],
+        max_len_trg=CONFIG[f"max_len_{CONFIG['trg']}"],
         dropout=CONFIG['dropout']
     ).to(device)
     
@@ -167,12 +273,12 @@ def main():
     print("="*60)
     
     # Loss function (ignore padding)
-    criterion = nn.CrossEntropyLoss(ignore_index=pad_idx, label_smoothing=0.05)
+    criterion = nn.CrossEntropyLoss(ignore_index=trg_pad_idx, label_smoothing=0.05)
     
     # Optimizer (learning rate sẽ được điều chỉnh bởi warmup scheduler)
     optimizer = create_optimizer(
         model,
-        learning_rate=1.0,  # Base LR, sẽ được warmup scheduler điều chỉnh
+        learning_rate=CONFIG['learning_rate'],  # Base LR, sẽ được warmup scheduler điều chỉnh
         weight_decay=CONFIG['weight_decay']
     )
     
@@ -191,7 +297,7 @@ def main():
         patience=3
     )
     
-    print(f"  Loss function: CrossEntropyLoss (ignore_index={pad_idx}, label_smoothing=0.05)")
+    print(f"  Loss function: CrossEntropyLoss (ignore_index={trg_pad_idx}, label_smoothing=0.05)")
     print(f"  Optimizer: Adam (base_lr=1.0, weight_decay={CONFIG['weight_decay']})")
     print(f"  Warmup Scheduler: {CONFIG['warmup_steps']} steps")
     print(f"  Plateau Scheduler: ReduceLROnPlateau (factor=0.5, patience=3)")
@@ -206,7 +312,8 @@ def main():
         optimizer=optimizer,
         criterion=criterion,
         device=device,
-        pad_idx=pad_idx,
+        src_pad_idx=src_pad_idx,
+        trg_pad_idx=trg_pad_idx,
         checkpoint_dir='checkpoints',
         log_dir='logs'
     )
@@ -238,16 +345,17 @@ def main():
     print("="*60 + "\n")
     
     # Create decoders
-    greedy_decoder = GreedySearchDecoder(model, max_len=100)
+    greedy_decoder = GreedySearchDecoder(model, max_len=100, use_subword=CONFIG['use_subword'])
     beam_decoder = BeamSearchDecoder(
         model,
         beam_size=CONFIG['beam_size'],
-        max_len=100,
-        length_penalty=CONFIG['length_penalty']
+        max_len=CONFIG[f"max_len_{CONFIG['trg']}"],
+        length_penalty=CONFIG['length_penalty'],
+        use_subword=CONFIG['use_subword']
     )
     
     # Evaluate
-    evaluator = Evaluator(model, test_loader, src_vocab, trg_vocab, device)
+    evaluator = Evaluator(model, test_loader, src_vocab, trg_vocab, device, use_subword=CONFIG['use_subword'])
     comparison_results = evaluator.compare_decoders(greedy_decoder, beam_decoder)
     
     # ==================== 9. VISUALIZATION ====================
