@@ -127,8 +127,15 @@ def main(config):
     trg_sentences = [x[CONFIG['trg']] for x in train_dataset]
     
     if CONFIG['use_subword']:
-        src_vocab = SubwordVocabulary(f"spm_{CONFIG['src']}.model")
-        trg_vocab = SubwordVocabulary(f"spm_{CONFIG['trg']}.model")
+        if not CONFIG[f"spm_{CONFIG['src']}_path"]:
+            src_vocab = SubwordVocabulary(f"spm_{CONFIG['src']}.model")
+        else:
+            src_vocab = SubwordVocabulary(CONFIG[f"spm_{CONFIG['src']}_path"])
+        
+        if not CONFIG[f"spm_{CONFIG['trg']}_path"]:
+            trg_vocab = SubwordVocabulary(f"spm_{CONFIG['trg']}.model")
+        else:
+            trg_vocab = SubwordVocabulary(CONFIG[f"spm_{CONFIG['trg']}_path"])
     else:
         src_vocab = Vocabulary(freq_threshold=CONFIG['freq_threshold'])
         src_vocab.build_vocabulary(src_sentences)
