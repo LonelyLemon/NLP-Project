@@ -56,7 +56,8 @@ def main(config):
 
         'model_path': None,
         'spm_en_path': None,
-        'spm_vi_path': None
+        'spm_vi_path': None,
+        'history_path': None
     }
 
     for key, value in CONFIG.items():
@@ -382,7 +383,7 @@ def main(config):
     # ==================== 9. VISUALIZATION ====================
     
     generate_all_plots(
-        history_path='logs/training_history.json',
+        history_path='logs/training_history.json' if not CONFIG['history_path'] else CONFIG['history_path'],
         comparison_results=comparison_results,
         save_dir='figures'
     )
