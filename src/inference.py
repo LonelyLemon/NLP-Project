@@ -108,17 +108,20 @@ class BeamSearchDecoder:
             # Không còn candidates nào
             if not candidates:
                 break
+
+            candidates.sort(reverse=True, key=lambda x: x[0])
+            beams = candidates[:self.beam_size]
             
             # Chọn top-k beams theo score
             # Apply length normalization: score / (len ** alpha)
-            candidates_normalized = [
-                (score / (len(tokens) ** self.length_penalty), score, tokens)
-                for score, tokens in candidates
-            ]
-            candidates_normalized.sort(reverse=True, key=lambda x: x[0])
+            # candidates_normalized = [
+            #     (score / (len(tokens) ** self.length_penalty), score, tokens)
+            #     for score, tokens in candidates
+            # ]
+            # candidates_normalized.sort(reverse=True, key=lambda x: x[0])
             
-            # Keep top beam_size
-            beams = [(score, tokens) for _, score, tokens in candidates_normalized[:self.beam_size]]
+            # # Keep top beam_size
+            # beams = [(score, tokens) for _, score, tokens in candidates_normalized[:self.beam_size]]
             
             # Early stopping: nếu đã có đủ completed beams
             if len(completed_beams) >= self.beam_size:
@@ -128,11 +131,20 @@ class BeamSearchDecoder:
         completed_beams.extend(beams)
         
         # Chọn best beam (normalize by length)
+        # if completed_beams:
+        #     best = max(completed_beams, key=lambda x: x[0] / (len(x[1]) ** self.length_penalty))
+        #     return best[1]
+        # else:
+        #     # Fallback: return beam đầu tiên
+        #     return beams[0][1] if beams else [sos_idx, eos_idx]
+
         if completed_beams:
-            best = max(completed_beams, key=lambda x: x[0] / (len(x[1]) ** self.length_penalty))
+            best = max(
+                completed_beams,
+                key=lambda x: x[0] / (len(x[1]) ** self.length_penalty)
+            )
             return best[1]
         else:
-            # Fallback: return beam đầu tiên
             return beams[0][1] if beams else [sos_idx, eos_idx]
     
     def translate(self, src_sentence, src_vocab, tgt_vocab, device):

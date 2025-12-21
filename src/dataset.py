@@ -50,8 +50,16 @@ class Vocabulary:
         ]
     
     def decode(self, indices, raw_src):
-        tokens = [self.itos.get(idx, '') for idx in indices if idx not in [self.pad_idx, self.eos_idx, self.sos_idx, self.unk_idx]]
-        seq = ' '.join(tokens)
+        tokens = []
+        for idx in indices:
+            if idx in [self.pad_idx, self.sos_idx, self.eos_idx]:
+                continue
+            if idx == self.unk_idx:
+                tokens.append("<unk>")
+            else:
+                tokens.append(self.itos.get(idx, "<unk>"))
+
+        seq = " ".join(tokens)
         return postprocess_text(raw_input=raw_src, pred=seq)
         
 
@@ -97,7 +105,7 @@ class BilingualDataset(Dataset):
 
         src_numericalized = [self.src_vocab.sos_idx]
         src_numericalized += self.src_vocab.numericalize(src_text)[:self.max_src_len - 2]
-        src_numericalized.append(self.src_vocab.eos_id)
+        src_numericalized.append(self.src_vocab.eos_idx)
 
         trg_numericalized = [self.trg_vocab.sos_idx]
         trg_numericalized += self.trg_vocab.numericalize(trg_text)[:self.max_trg_len - 2]
