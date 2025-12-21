@@ -8,6 +8,8 @@ def preprocess_text(text: str) -> str:
     text = html.unescape(text)
     text = text.lower()
     text = unicodedata.normalize('NFKC', text)
+    text = text.replace('—', '--').replace('–', '-')
+    text = text.replace('--', '§')
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
@@ -56,7 +58,7 @@ def postprocess_text(raw_input: str, pred: str) -> str:
     for i, word in enumerate(raw_input_words):
         if i <= start_id:
             continue
-        if word[0].isupper() and raw_input_words[i - 1][0] not in ['.', '?', '!']:
+        if any(char.isupper() for char in word) and raw_input_words[i - 1][0] not in ['.', '?', '!']:
             upper_words.append(word)
     
     for word in upper_words:
@@ -81,7 +83,7 @@ def postprocess_text(raw_input: str, pred: str) -> str:
             all_words.append(word[0].upper() + word[1:])
         else:
             all_words.append(word)
-    return ' '.join(all_words)
+    return ' '.join(all_words).replace('§', '--')
 
 if __name__ == '__main__':
     raw_text = 'And he said , &quot; Well , recently I pitched a sustainability project to a client , and turned and he said to me , &apos; I know it &apos;s going to cost less , I know it &apos;s going to sell more , but we &apos;re not pioneers , because pioneers have arrows in their backs . &apos; &quot; I think we &apos;ve got a roomful of pioneers , and I hope there are far more pioneers out there , because we need to solve these problems .'
