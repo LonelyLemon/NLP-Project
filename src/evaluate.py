@@ -14,7 +14,7 @@ class Evaluator:
         self.device = device
         self.use_subword = use_subword
         
-        self.bleu_metric = BLEU(tokenize='none' if use_subword else '13a')
+        self.bleu_metric = BLEU(tokenize='intl', lowercase=True, smooth_method='exp')
         self.rouge_scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=False)
 
     
