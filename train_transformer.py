@@ -1,12 +1,7 @@
-"""
-Main training script cho Transformer Machine Translation
-IWSLT2015 English-Vietnamese Dataset
-"""
-
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
-from datasets import load_dataset
+from datasets import load_dataset, Dataset
 
 from src.dataset import Vocabulary, BilingualDataset, Collate, SubwordVocabulary, SpmBilingualDataset
 from src.model.transformer import Transformer
@@ -18,14 +13,28 @@ from src.data_processor import preprocess_dataset
 import os
 import sentencepiece as spm
 
-def main(config):
+def load_text_to_dataset(en_path, vi_path):
+    if en_path is None or vi_path is None:
+        return Dataset.from_dict({"en": [], "vi": []})
+
+    with open(en_path, 'r', encoding='utf-8') as f:
+        en_lines = [line.strip() for line in f]
+    with open(vi_path, 'r', encoding='utf-8') as f:
+        vi_lines = [line.strip() for line in f]
+
+    min_len = min(len(en_lines), len(vi_lines))
+    en_lines = en_lines[:min_len]
+    vi_lines = vi_lines[:min_len]
+
+    return Dataset.from_dict({"en": en_lines, "vi": vi_lines})
+
+def main(config={}):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"\n🖥️  Device: {device}")
+    print("Device:", device)
 
     CONFIG = {
         'src': 'en',
         'trg': 'vi',
-        'use_subword': True,
         'use_rope': True,
         'vocab_size_en': 12000,
         'vocab_size_vi': 7000,
@@ -50,36 +59,32 @@ def main(config):
 
         'freq_threshold': 2,
         
-
         'beam_size': 5,
         'length_penalty': 0.6,
 
         'model_path': None,
         'spm_en_path': None,
         'spm_vi_path': None,
-        'history_path': None
+        'history_path': None,
+        'train_en_path': None,
+        'train_vi_path': None,
+        'valid_en_path': None,
+        'valid_vi_path': None,
+        'test_en_path': None,
+        'test_vi_path': None
     }
 
     for key, value in CONFIG.items():
         if key in config:
             CONFIG[key] = config[key]
     
-    print("\n" + "="*60)
-    print("⚙️  CONFIGURATION")
-    print("="*60)
+    print("CONFIGURATION")
     for key, value in CONFIG.items():
-        print(f"  {key:<20}: {value}")
-    print("="*60 + "\n")
+        print(key, ":", value)
     
-    # ==================== 1. LOAD DATA ====================
-    
-    print("\n" + "="*60)
-    print("📥 LOADING IWSLT2015 DATASET")
-    print("="*60)
-    dataset = load_dataset('thainq107/iwslt2015-en-vi')
-    train_dataset = dataset['train']
-    val_dataset = dataset['validation']
-    test_dataset = dataset['test']
+    train_dataset = load_text_to_dataset(CONFIG['train_en_path'], CONFIG['train_vi_path'])
+    val_dataset = load_text_to_dataset(CONFIG['valid_en_path'], CONFIG['valid_vi_path'])
+    test_dataset = load_text_to_dataset(CONFIG['test_en_path'], CONFIG['test_vi_path'])
     
     train_dataset = preprocess_dataset(train_dataset)
     val_dataset = preprocess_dataset(val_dataset)
@@ -90,11 +95,7 @@ def main(config):
     print(f"  Test samples:  {len(test_dataset):,}")
     print("="*60 + "\n")
     
-    # ==================== 2. BUILD VOCABULARY ====================
-    
-    print("\n" + "="*60)
-    print("📚 BUILDING VOCABULARY")
-    print("="*60)
+    print("Building vocabulary...")
 
     with open("temp_train.en", "w", encoding="utf-8") as f_en, \
      open("temp_train.vi", "w", encoding="utf-8") as f_vi:
@@ -124,89 +125,41 @@ def main(config):
     os.remove("temp_train.en")
     os.remove("temp_train.vi")
     
-    src_sentences = [x[CONFIG['src']] for x in train_dataset]
-    trg_sentences = [x[CONFIG['trg']] for x in train_dataset]
-    
-    if CONFIG['use_subword']:
-        if not CONFIG[f"spm_{CONFIG['src']}_path"]:
-            src_vocab = SubwordVocabulary(f"spm_{CONFIG['src']}.model")
-        else:
-            src_vocab = SubwordVocabulary(CONFIG[f"spm_{CONFIG['src']}_path"])
-        
-        if not CONFIG[f"spm_{CONFIG['trg']}_path"]:
-            trg_vocab = SubwordVocabulary(f"spm_{CONFIG['trg']}.model")
-        else:
-            trg_vocab = SubwordVocabulary(CONFIG[f"spm_{CONFIG['trg']}_path"])
-    else:
-        src_vocab = Vocabulary(freq_threshold=CONFIG['freq_threshold'])
-        src_vocab.build_vocabulary(src_sentences)
-        
-        trg_vocab = Vocabulary(freq_threshold=CONFIG['freq_threshold'])
-        trg_vocab.build_vocabulary(trg_sentences)
-    
-    
-    # ==================== 3. CREATE DATALOADERS ====================
-    
-    print("\n" + "="*60)
-    print("🔄 CREATING DATALOADERS")
-    print("="*60)
-    
-    if CONFIG['use_subword']:
-        train_data = SpmBilingualDataset(
-            train_dataset, 
-            src_vocab=src_vocab, 
-            trg_vocab=trg_vocab, 
-            max_src_len=CONFIG[f"max_len_{CONFIG['src']}"],
-            max_trg_len=CONFIG[f"max_len_{CONFIG['trg']}"],
-            src_lang=CONFIG['src'], 
-            trg_lang=CONFIG['trg']
-        )
-        val_data = SpmBilingualDataset(
-            val_dataset, 
-            src_vocab=src_vocab, 
-            trg_vocab=trg_vocab, 
-            max_src_len=CONFIG[f"max_len_{CONFIG['src']}"],
-            max_trg_len=CONFIG[f"max_len_{CONFIG['trg']}"],
-            src_lang=CONFIG['src'], 
-            trg_lang=CONFIG['trg']
-        )
-        test_data = SpmBilingualDataset(
-            test_dataset, 
-            src_vocab=src_vocab, 
-            trg_vocab=trg_vocab, 
-            max_src_len=CONFIG[f"max_len_{CONFIG['src']}"],
-            max_trg_len=CONFIG[f"max_len_{CONFIG['trg']}"],
-            src_lang=CONFIG['src'], 
-            trg_lang=CONFIG['trg']
-        )
-    else:
-        train_data = BilingualDataset(
-            train_dataset, 
-            src_vocab=src_vocab, 
-            trg_vocab=trg_vocab, 
-            max_src_len=CONFIG[f"max_len_{CONFIG['src']}"],
-            max_trg_len=CONFIG[f"max_len_{CONFIG['trg']}"],
-            src_lang=CONFIG['src'], 
-            trg_lang=CONFIG['trg']
-        )
-        val_data = BilingualDataset(
-            val_dataset, 
-            src_vocab=src_vocab, 
-            trg_vocab=trg_vocab, 
-            max_src_len=CONFIG[f"max_len_{CONFIG['src']}"],
-            max_trg_len=CONFIG[f"max_len_{CONFIG['trg']}"],
-            src_lang=CONFIG['src'], 
-            trg_lang=CONFIG['trg']
-        )
-        test_data = BilingualDataset(
-            test_dataset, 
-            src_vocab=src_vocab, 
-            trg_vocab=trg_vocab, 
-            max_src_len=CONFIG[f"max_len_{CONFIG['src']}"],
-            max_trg_len=CONFIG[f"max_len_{CONFIG['trg']}"],
-            src_lang=CONFIG['src'], 
-            trg_lang=CONFIG['trg']
-        )
+    src_model_path = CONFIG.get(f"spm_{CONFIG['src']}_path") or f"spm_{CONFIG['src']}.model"
+    trg_model_path = CONFIG.get(f"spm_{CONFIG['trg']}_path") or f"spm_{CONFIG['trg']}.model"
+
+    src_vocab = SubwordVocabulary(src_model_path)
+    trg_vocab = SubwordVocabulary(trg_model_path)
+
+    print("Creating dataloaders...")
+
+    train_data = SpmBilingualDataset(
+        train_dataset, 
+        src_vocab=src_vocab, 
+        trg_vocab=trg_vocab, 
+        max_src_len=CONFIG[f"max_len_{CONFIG['src']}"],
+        max_trg_len=CONFIG[f"max_len_{CONFIG['trg']}"],
+        src_lang=CONFIG['src'], 
+        trg_lang=CONFIG['trg']
+    )
+    val_data = SpmBilingualDataset(
+        val_dataset, 
+        src_vocab=src_vocab, 
+        trg_vocab=trg_vocab, 
+        max_src_len=CONFIG[f"max_len_{CONFIG['src']}"],
+        max_trg_len=CONFIG[f"max_len_{CONFIG['trg']}"],
+        src_lang=CONFIG['src'], 
+        trg_lang=CONFIG['trg']
+    )
+    test_data = SpmBilingualDataset(
+        test_dataset, 
+        src_vocab=src_vocab, 
+        trg_vocab=trg_vocab, 
+        max_src_len=CONFIG[f"max_len_{CONFIG['src']}"],
+        max_trg_len=CONFIG[f"max_len_{CONFIG['trg']}"],
+        src_lang=CONFIG['src'], 
+        trg_lang=CONFIG['trg']
+    )
     
     src_pad_idx = src_vocab.pad_idx
     trg_pad_idx = trg_vocab.pad_idx
@@ -249,16 +202,7 @@ def main(config):
         num_workers=CONFIG['num_workers']
     )
     
-    print(f"  Train batches: {len(train_loader)}")
-    print(f"  Val batches:   {len(val_loader)}")
-    print(f"  Test batches:  {len(test_loader)}")
-    print("="*60 + "\n")
-    
-    # ==================== 4. CREATE MODEL ====================
-    
-    print("\n" + "="*60)
-    print("🏗️  CREATING TRANSFORMER MODEL")
-    print("="*60)
+    print("Creating Transformer model...")
     
     model = Transformer(
         src_vocab_size=len(src_vocab),
@@ -276,48 +220,28 @@ def main(config):
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     
-    print(f"  Total parameters:     {total_params:,}")
-    print(f"  Trainable parameters: {trainable_params:,}")
-    print("="*60 + "\n")
+    print("Total parameters:", total_params)
+    print("Trainable parameters:", trainable_params)
+
+    print("Setting up training...")
     
-    # ==================== 5. SETUP TRAINING ====================
-    
-    print("\n" + "="*60)
-    print("🎯 SETUP TRAINING")
-    print("="*60)
-    
-    # Loss function (ignore padding)
     criterion = nn.CrossEntropyLoss(ignore_index=trg_pad_idx, label_smoothing=0.05)
-    
-    # Optimizer (learning rate sẽ được điều chỉnh bởi warmup scheduler)
     optimizer = create_optimizer(
         model,
-        learning_rate=CONFIG['learning_rate'],  # Base LR, sẽ được warmup scheduler điều chỉnh
+        learning_rate=CONFIG['learning_rate'],
         weight_decay=CONFIG['weight_decay']
     )
-    
-    # Warmup scheduler (theo paper "Attention is All You Need")
     warmup_scheduler = WarmupScheduler(
         optimizer,
         d_model=CONFIG['model_dim'],
         warmup_steps=CONFIG['warmup_steps']
     )
-    
-    # Learning rate scheduler (sau warmup)
     plateau_scheduler = create_scheduler(
         optimizer,
         mode='plateau',
         factor=0.5,
         patience=3
     )
-    
-    print(f"  Loss function: CrossEntropyLoss (ignore_index={trg_pad_idx}, label_smoothing=0.05)")
-    print(f"  Optimizer: Adam (base_lr=1.0, weight_decay={CONFIG['weight_decay']})")
-    print(f"  Warmup Scheduler: {CONFIG['warmup_steps']} steps")
-    print(f"  Plateau Scheduler: ReduceLROnPlateau (factor=0.5, patience=3)")
-    print("="*60 + "\n")
-    
-    # ==================== 6. TRAINING ====================
     
     if not CONFIG['model_path']:
         trainer = Trainer(
@@ -328,80 +252,36 @@ def main(config):
             criterion=criterion,
             device=device,
             src_pad_idx=src_pad_idx,
-            trg_pad_idx=trg_pad_idx,
-            checkpoint_dir='checkpoints',
-            log_dir='logs'
+            trg_pad_idx=trg_pad_idx
         )
-        
         trainer.train(
             num_epochs=CONFIG['num_epochs'],
             warmup_scheduler=warmup_scheduler,
             plateau_scheduler=plateau_scheduler,
             patience=CONFIG['patience']
         )
-    
-    # ==================== 7. LOAD BEST MODEL ====================
-    
-        print("\n" + "="*60)
-        print("📦 LOADING BEST MODEL")
-        print("="*60)
-        
-        checkpoint = torch.load('checkpoints/best_model.pt', map_location=device)
+        checkpoint = torch.load('best_model.pt', map_location=device)
         model.load_state_dict(checkpoint['model_state_dict'])
-        
-        print(f"  Best epoch: {checkpoint['epoch']}")
-        print(f"  Best val loss: {checkpoint['val_loss']:.4f}")
-        print("="*60 + "\n")
-        
-        # ==================== 8. INFERENCE & EVALUATION ====================
-        
-        print("\n" + "="*60)
-        print("🔍 INFERENCE & EVALUATION")
-        print("="*60 + "\n")
     else:
-        print("\n" + "="*60)
-        print("📦 LOADING PRETRAIN MODEL")
-        print("="*60)
-
         checkpoint = torch.load(CONFIG['model_path'], map_location=device)
         model.load_state_dict(checkpoint['model_state_dict'])
     
-    # Create decoders
-    greedy_decoder = GreedySearchDecoder(model, max_len=100, use_subword=CONFIG['use_subword'])
+    greedy_decoder = GreedySearchDecoder(model, max_len=100)
     beam_decoder = BeamSearchDecoder(
         model,
         beam_size=CONFIG['beam_size'],
         max_len=CONFIG[f"max_len_{CONFIG['trg']}"],
-        length_penalty=CONFIG['length_penalty'],
-        use_subword=CONFIG['use_subword']
+        length_penalty=CONFIG['length_penalty']
     )
-    
-    # Evaluate
-    evaluator = Evaluator(model, test_loader, src_vocab, trg_vocab, device, use_subword=CONFIG['use_subword'])
+
+    evaluator = Evaluator(model, test_loader, src_vocab, trg_vocab, device)
     comparison_results = evaluator.compare_decoders(greedy_decoder, beam_decoder)
-    
-    # ==================== 9. VISUALIZATION ====================
-    
+
     generate_all_plots(
-        history_path='logs/training_history.json' if not CONFIG['history_path'] else CONFIG['history_path'],
+        history_path='training_history.json' if not CONFIG['history_path'] else CONFIG['history_path'],
         comparison_results=comparison_results,
         save_dir='figures'
     )
     
-    # ==================== DONE ====================
-    
-    print("\n" + "="*60)
-    print("✅ ALL TASKS COMPLETED!")
-    print("="*60)
-    print("\n📁 Output files:")
-    print("  - checkpoints/best_model.pt")
-    print("  - logs/training_history.json")
-    print("  - figures/training_curves.png")
-    print("  - figures/metrics_comparison.png")
-    print("  - figures/loss_histogram.png")
-    print("  - figures/summary_table.png")
-    print("\n" + "="*60 + "\n")
-
-
 if __name__ == "__main__":
     main()

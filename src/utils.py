@@ -24,30 +24,20 @@ def create_masks(src, tgt, src_pad_idx, trg_pad_idx, device='cpu'):
     return src_mask, tgt_mask
 
 
-def save_checkpoint(model, optimizer, epoch, train_loss, val_loss, filepath):
-    checkpoint = {
-        'epoch': epoch,
+def save_checkpoint(model, optimizer, filepath):
+    torch.save({
         'model_state_dict': model.state_dict(),
         'optimizer_state_dict': optimizer.state_dict(),
-        'train_loss': train_loss,
-        'val_loss': val_loss
-    }
-    torch.save(checkpoint, filepath)
-    print(f"✅ Checkpoint saved: {filepath}")
-
+    }, filepath)
+    print(f"Checkpoint saved: {filepath}")
 
 def load_checkpoint(filepath, model, optimizer=None, device='cpu'):
     checkpoint = torch.load(filepath, map_location=device)
     model.load_state_dict(checkpoint['model_state_dict'])
-    
     if optimizer is not None:
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    
-    print(f"✅ Checkpoint loaded: {filepath}")
-    print(f"   Epoch: {checkpoint['epoch']}, Val Loss: {checkpoint['val_loss']:.4f}")
-    
-    return checkpoint['epoch'], checkpoint['train_loss'], checkpoint['val_loss']
-
+    print(f"Checkpoint loaded: {filepath}")
+    return checkpoint
 
 def count_parameters(model):
     total = sum(p.numel() for p in model.parameters())
