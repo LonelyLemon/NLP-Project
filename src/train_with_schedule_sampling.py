@@ -33,7 +33,7 @@ class ScheduledSamplingTrainer(Trainer):
 
             B, TL = tgt.size()
             
-            src_mask = create_padding_mask(src, self.src_pad_idx).to(self.device)
+            src_mask = create_padding_mask(src, self.src_vocab.pad_idx).to(self.device)
             enc_output = self.model.encode(src, src_mask)
 
             input_step = tgt[:, 0].unsqueeze(1)  # [B,1]
@@ -87,7 +87,7 @@ class ScheduledSamplingTrainer(Trainer):
             tgt = tgt.to(self.device)
             B, TL = tgt.size()
             
-            src_mask = create_padding_mask(src, self.src_pad_idx).to(self.device)
+            src_mask = create_padding_mask(src, self.src_vocab.pad_idx).to(self.device)
             enc_output = self.model.encode(src, src_mask)
 
             input_step = tgt[:, 0].unsqueeze(1)
