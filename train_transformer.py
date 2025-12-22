@@ -63,10 +63,10 @@ def main(config={}):
         'beam_size': 5,
         'length_penalty': 0.6,
 
-        'model_path': None,
-        'spm_en_path': None,
-        'spm_vi_path': None,
-        'history_path': None,
+        # 'model_path': None,
+        # 'spm_en_path': None,
+        # 'spm_vi_path': None,
+        # 'history_path': None,
         'train_en_path': None,
         'train_vi_path': None,
         'valid_en_path': None,
@@ -103,26 +103,24 @@ def main(config={}):
         for x in train_dataset:
             f_en.write(x["en"].strip() + "\n")
             f_vi.write(x["vi"].strip() + "\n")
-    
-    if not CONFIG['spm_en_path']:
-        spm.SentencePieceTrainer.train(
-            input="temp_train.en",
-            model_prefix="spm_en",
-            vocab_size=CONFIG['vocab_size_en'],
-            model_type=CONFIG['vocab_model_type'],
-            character_coverage=1.0,
-            pad_id=0, bos_id=1, eos_id=2, unk_id=3
-        )
 
-    if not CONFIG['spm_vi_path']:
-        spm.SentencePieceTrainer.train(
-            input="temp_train.vi",
-            model_prefix="spm_vi",
-            vocab_size=CONFIG['vocab_size_vi'],
-            model_type=CONFIG['vocab_model_type'],
-            character_coverage=0.9995,
-            pad_id=0, bos_id=1, eos_id=2, unk_id=3
-        )
+    spm.SentencePieceTrainer.train(
+        input="temp_train.en",
+        model_prefix="spm_en",
+        vocab_size=CONFIG['vocab_size_en'],
+        model_type=CONFIG['vocab_model_type'],
+        character_coverage=1.0,
+        pad_id=0, bos_id=1, eos_id=2, unk_id=3
+    )
+
+    spm.SentencePieceTrainer.train(
+        input="temp_train.vi",
+        model_prefix="spm_vi",
+        vocab_size=CONFIG['vocab_size_vi'],
+        model_type=CONFIG['vocab_model_type'],
+        character_coverage=0.9995,
+        pad_id=0, bos_id=1, eos_id=2, unk_id=3
+    )
     os.remove("temp_train.en")
     os.remove("temp_train.vi")
     
@@ -246,30 +244,26 @@ def main(config={}):
         patience=3
     )
     
-    if not CONFIG['model_path']:
-        trainer = Trainer(
-            model=model,
-            train_loader=train_loader,
-            val_loader=val_loader,
-            optimizer=optimizer,
-            criterion=criterion,
-            device=device,
-            src_vocab=src_vocab,
-            trg_vocab=trg_vocab,
-            max_tgt_len=CONFIG[f"max_len_{CONFIG['trg']}"]
-        )
-        trainer.train(
-            num_epochs=CONFIG['num_epochs'],
-            warmup_scheduler=warmup_scheduler,
-            plateau_scheduler=plateau_scheduler,
-            patience=CONFIG['patience']
-        )
-        checkpoint = torch.load('best_model.pt', map_location=device)
-        model.load_state_dict(checkpoint['model_state_dict'])
-    else:
-        checkpoint = torch.load(CONFIG['model_path'], map_location=device)
-        model.load_state_dict(checkpoint['model_state_dict'])
-    
+    trainer = Trainer(
+        model=model,
+        train_loader=train_loader,
+        val_loader=val_loader,
+        optimizer=optimizer,
+        criterion=criterion,
+        device=device,
+        src_vocab=src_vocab,
+        trg_vocab=trg_vocab,
+        max_tgt_len=CONFIG[f"max_len_{CONFIG['trg']}"]
+    )
+    trainer.train(
+        num_epochs=CONFIG['num_epochs'],
+        warmup_scheduler=warmup_scheduler,
+        plateau_scheduler=plateau_scheduler,
+        patience=CONFIG['patience']
+    )
+    checkpoint = torch.load('best_model.pt', map_location=device)
+    model.load_state_dict(checkpoint['model_state_dict'])
+ 
     greedy_decoder = GreedySearchDecoder(model, max_len=CONFIG[f"max_len_{CONFIG['trg']}"])
     beam_decoder = BeamSearchDecoder(
         model,
@@ -282,7 +276,7 @@ def main(config={}):
     comparison_results = evaluator.compare_decoders(greedy_decoder, beam_decoder)
 
     generate_all_plots(
-        history_path='training_history.json' if not CONFIG['history_path'] else CONFIG['history_path'],
+        history_path='history.json',
         comparison_results=comparison_results,
         save_dir='figures'
     )
