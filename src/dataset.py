@@ -80,7 +80,14 @@ class SubwordVocabulary:
         return self.sp.encode(text, out_type=int)
 
     def decode(self, indices, raw_src):
-        seq = self.sp.decode_ids(indices)
+        clean_ids = []
+        for idx in indices:
+            if idx == self.eos_idx:
+                break
+            if idx in (self.pad_idx, self.sos_idx):
+                continue
+            clean_ids.append(idx)
+        seq = self.sp.decode_ids(clean_ids)
         return postprocess_text(raw_input=raw_src, pred=seq)
 
 

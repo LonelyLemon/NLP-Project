@@ -267,7 +267,7 @@ def main(config={}):
         checkpoint = torch.load(CONFIG['model_path'], map_location=device)
         model.load_state_dict(checkpoint['model_state_dict'])
     
-    greedy_decoder = GreedySearchDecoder(model, max_len=100)
+    greedy_decoder = GreedySearchDecoder(model, max_len=CONFIG[f"max_len_{CONFIG['trg']}"])
     beam_decoder = BeamSearchDecoder(
         model,
         beam_size=CONFIG['beam_size'],
