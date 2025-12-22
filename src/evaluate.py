@@ -3,7 +3,7 @@ from tqdm import tqdm
 from sacrebleu.metrics import BLEU
 from rouge_score import rouge_scorer
 import numpy as np
-from inference import GreedySearchDecoder
+from src.inference import GreedySearchDecoder
 
 
 class Evaluator:
