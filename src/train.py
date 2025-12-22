@@ -134,8 +134,7 @@ class Trainer:
             if val_loss < self.best_val_loss:
                 self.best_val_loss = val_loss
                 epochs_no_improve = 0
-                save_checkpoint(self.model, self.optimizer, epoch, train_loss, val_loss,
-                                self.checkpoint_path)
+                save_checkpoint(self.model, self.optimizer, self.checkpoint_path)
             else:
                 epochs_no_improve += 1
 
