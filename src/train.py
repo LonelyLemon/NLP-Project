@@ -102,7 +102,7 @@ class Trainer:
             tgt_input = tgt[:, :-1]
             tgt_output = tgt[:, 1:]
             
-            src_mask, tgt_mask = create_masks(src, tgt_input, self.src_pad_idx, self.trg_pad_idx, self.device)
+            src_mask, tgt_mask = create_masks(src, tgt_input, self.src_vocab.pad_idx, self.tgt_vocab.pad_idx, self.device)
             
             logits = self.model(src, tgt_input, src_mask, tgt_mask)
             
