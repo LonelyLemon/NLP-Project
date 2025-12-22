@@ -26,7 +26,7 @@ class Evaluator:
                     raw_src = raw_src_batch[i]
                     src = src_batch[i:i+1].to(self.device)
                     ref_sentence = raw_tgt_batch[i]
-                    pred_indices = decoder.decode(src, self.tgt_vocab, self.device)
+                    pred_indices = decoder.decode(src, self.src_vocab, self.tgt_vocab, self.device)
                     pred_sentence = self.tgt_vocab.decode(pred_indices, raw_src)
 
                     hypotheses.append(pred_sentence)

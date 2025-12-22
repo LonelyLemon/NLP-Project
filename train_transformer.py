@@ -251,8 +251,9 @@ def main(config={}):
             optimizer=optimizer,
             criterion=criterion,
             device=device,
-            src_pad_idx=src_pad_idx,
-            trg_pad_idx=trg_pad_idx
+            src_vocab=src_vocab,
+            trg_vocab=trg_vocab,
+            max_tgt_len=CONFIG[f"max_len{CONFIG['trg']}"]
         )
         trainer.train(
             num_epochs=CONFIG['num_epochs'],
