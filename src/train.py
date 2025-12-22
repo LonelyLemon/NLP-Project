@@ -88,49 +88,12 @@ class Trainer:
         
         avg_loss = total_loss / len(self.train_loader)
         return avg_loss
-    
-    @torch.no_grad()
-    def greedy_decode_batch(self, src, max_len=100):
-        self.model.eval()
-        B = src.size(0)
-        device = src.device
-        pad_idx = self.src_vocab.pad_idx
-        sos_idx = self.tgt_vocab.sos_idx
-        eos_idx = self.tgt_vocab.eos_idx
-
-        src_mask = create_padding_mask(src, pad_idx).to(device)
-        enc_output = self.model.encode(src, src_mask)
-        ys = torch.full(
-            (B, 1),
-            sos_idx,
-            dtype=torch.long,
-            device=device
-        )
-        finished = torch.zeros(B, dtype=torch.bool, device=device)
-        for _ in range(max_len):
-            tgt_mask = create_causal_mask(ys.size(1), device)  # [1, T, T] hoặc [T, T]
-
-            dec_output = self.model.decode(
-                ys, enc_output, src_mask, tgt_mask
-            )  # [B, T, D]
-
-            logits = self.model.output_proj(dec_output[:, -1, :])  # [B, V]
-            next_tokens = logits.argmax(dim=-1)                     # [B]
-
-            ys = torch.cat([ys, next_tokens.unsqueeze(1)], dim=1)  # [B, T+1]
-
-            finished |= (next_tokens == eos_idx)
-            if finished.all():
-                break
-
-        return ys.tolist()
 
     @torch.no_grad()
     def validate(self, epoch):
         self.model.eval()
         total_loss = 0
-        all_hypotheses = []
-        all_references = []
+        
         pbar = tqdm(self.val_loader, desc=f'Epoch {epoch} [Val]  ')
         for raw_src, src, raw_tgt, tgt in pbar:
             src = src.to(self.device)
@@ -139,13 +102,7 @@ class Trainer:
             tgt_input = tgt[:, :-1]
             tgt_output = tgt[:, 1:]
             
-            src_mask, tgt_mask = create_masks(
-                src, 
-                tgt_input, 
-                self.src_vocab.pad_idx, 
-                self.tgt_vocab.pad_idx, 
-                self.device
-            )
+            src_mask, tgt_mask = create_masks(src, tgt_input, self.src_pad_idx, self.trg_pad_idx, self.device)
             
             logits = self.model(src, tgt_input, src_mask, tgt_mask)
             
@@ -154,70 +111,47 @@ class Trainer:
             
             loss = self.criterion(logits, tgt_output)
             total_loss += loss.item()
-
-            decoded_batch = self.greedy_decode_batch(src, max_len=self.max_tgt_len)
-            for pred_ids, ref_sentence, raw_input in zip(decoded_batch, raw_tgt, raw_src):
-                hyp = self.tgt_vocab.decode(pred_ids, raw_input)
-                all_hypotheses.append(hyp)
-                all_references.append(ref_sentence)
-
+            
             pbar.set_postfix({'loss': f'{loss.item():.4f}'})
         
         avg_loss = total_loss / len(self.val_loader)
-        bleu = self.bleu_metric.corpus_score(
-            all_hypotheses,
-            [all_references]
-        ).score
-        return avg_loss, bleu
+        return avg_loss
     
     def train(self, num_epochs, warmup_scheduler=None, plateau_scheduler=None, patience=5):
-        print("Start training")
-        total, trainable = count_parameters(self.model)
-        print("Model parameters - Total:", total, "Trainable:", trainable)
-        
         epochs_no_improve = 0
-        
+
         for epoch in range(1, num_epochs + 1):
             train_loss = self.train_epoch(epoch, warmup_scheduler)
-            val_loss, val_bleu = self.validate(epoch)
+            val_loss = self.validate(epoch)
             current_lr = self.optimizer.param_groups[0]['lr']
-            
+
             self.history['train_loss'].append(train_loss)
             self.history['val_loss'].append(val_loss)
-            self.history['val_bleu'].append(val_bleu)
             self.history['learning_rates'].append(current_lr)
-            
-            print(
-                f"Epoch {epoch}/{num_epochs} | "
-                f"Train Loss: {train_loss:.4f} | "
-                f"Val Loss: {val_loss:.4f} | "
-                f"BLEU: {val_bleu:.2f} | "
-                f"LR: {current_lr:.2e}"
-            )
-            if val_bleu > self.best_val_bleu:
-                self.best_val_bleu = val_bleu
-                epochs_no_improve = 0
 
-                save_checkpoint(
-                    self.model,
-                    self.optimizer,
-                    self.checkpoint_path
-                )
-                print(f"New best model saved (BLEU = {val_bleu:.2f})")
+            print(f"Epoch {epoch} | Train: {train_loss:.4f} | Val: {val_loss:.4f} | LR: {current_lr:.6f}")
+
+            if val_loss < self.best_val_loss:
+                self.best_val_loss = val_loss
+                epochs_no_improve = 0
+                save_checkpoint(self.model, self.optimizer, epoch, train_loss, val_loss,
+                                self.checkpoint_dir / 'best_model.pt')
             else:
                 epochs_no_improve += 1
-                print(f"No BLEU improvement for {epochs_no_improve} epoch(s)")
 
             if plateau_scheduler is not None:
                 plateau_scheduler.step(val_loss)
-            
 
             if epochs_no_improve >= patience:
-                print("Early stopping triggered")
+                print(f"Early stopping at epoch {epoch}")
                 break
 
+            if epoch % 5 == 0:
+                save_checkpoint(self.model, self.optimizer, epoch, train_loss, val_loss,
+                                self.checkpoint_dir / f'checkpoint_epoch_{epoch}.pt')
+
         self.save_history()
-        print("Training completed. Best BLEU:", self.best_val_bleu)
+        print(f"Training completed | Best Val Loss: {self.best_val_loss:.4f}")
     
     def save_history(self):
         with open(self.log_path, 'w', encoding='utf-8') as f:

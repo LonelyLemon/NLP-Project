@@ -51,8 +51,9 @@ class Transformer(nn.Module):
             src_mask: [B, 1, 1, S]
         Returns: [B, S, D]
         """
-        x = self.src_embedding(src) * math.sqrt(self.model_dim)
+        x = self.src_embedding(src)
         if self.pos_type == 'pos':
+            x = x * math.sqrt(self.model_dim)
             x = self.encoder_pe(x)
         x = self.dropout(x)
         
@@ -69,8 +70,9 @@ class Transformer(nn.Module):
             tgt_mask: [B, 1, T, T]
         Returns: [B, T, D]
         """
-        x = self.tgt_embedding(tgt) * math.sqrt(self.model_dim)
+        x = self.tgt_embedding(tgt)
         if self.pos_type == 'pos':
+            x = x * math.sqrt(self.model_dim)
             x = self.decoder_pe(x)
         x = self.dropout(x)
         

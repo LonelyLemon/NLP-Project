@@ -23,22 +23,16 @@ class Decoder(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x, enc_output, src_mask=None, tgt_mask=None):
-        """
-        Args:
-            x: [B, T, D]
-            enc_output: [B, L, D]
-            src_mask: [B, 1, 1, L]
-            tgt_mask: [B, 1, T, T]
-        Returns:
-            [B, T, D]
-        """
-        self_attn_out = self.self_attn(x, x, x, tgt_mask)
-        x2 = self.norm1(x + self.dropout(self_attn_out))
+        x_norm = self.norm1(x)
+        self_attn_out = self.self_attn(x_norm, x_norm, x_norm, tgt_mask)
+        x = x + self.dropout(self_attn_out)
 
-        cross_attn_out = self.cross_attn(x2, enc_output, enc_output, src_mask)
-        x3 = self.norm2(x2 + self.dropout(cross_attn_out))
+        x_norm = self.norm2(x)
+        cross_attn_out = self.cross_attn(x_norm, enc_output, enc_output, src_mask)
+        x = x + self.dropout(cross_attn_out)
 
-        ffn_out = self.ffn(x3)
-        x4 = self.norm3(x3 + self.dropout(ffn_out))
+        x_norm = self.norm3(x)
+        ffn_out = self.ffn(x_norm)
+        x = x + self.dropout(ffn_out)
 
-        return x4
+        return x

@@ -23,11 +23,13 @@ class Encoder(nn.Module):
 
     def forward(self, x, mask=None):
         # [B, L, D]
-        attn_out = self.mha(x, x, x, mask)
-        attn_out = self.norm1(x + self.dropout(attn_out))
+        x_norm = self.norm1(x)
+        attn_out = self.mha(x_norm, x_norm, x_norm, mask)
+        x = x + self.dropout(attn_out)
 
         # [B, L, D]
-        ffn_out = self.ffn(attn_out)
-        ffn_out = self.norm2(attn_out + self.dropout(ffn_out))
+        x_norm = self.norm2(x)
+        ffn_out = self.ffn(x_norm)
+        x = x + self.dropout(ffn_out)
 
         return ffn_out
