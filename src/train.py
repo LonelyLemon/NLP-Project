@@ -156,8 +156,8 @@ class Trainer:
             total_loss += loss.item()
 
             decoded_batch = self.greedy_decode_batch(src, max_len=self.max_tgt_len)
-            for pred_ids, ref_sentence in zip(decoded_batch, raw_tgt):
-                hyp = self.tgt_vocab.decode(pred_ids, raw_src)
+            for pred_ids, ref_sentence, raw_input in zip(decoded_batch, raw_tgt, raw_src):
+                hyp = self.tgt_vocab.decode(pred_ids, raw_input)
                 all_hypotheses.append(hyp)
                 all_references.append(ref_sentence)
 
