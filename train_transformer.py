@@ -36,6 +36,7 @@ def main(config={}):
         'src': 'en',
         'trg': 'vi',
         'use_rope': True,
+        'use_swig': False,
         'vocab_size_en': 12000,
         'vocab_size_vi': 7000,
         'vocab_model_type': 'unigram',
@@ -214,7 +215,9 @@ def main(config={}):
         ff_hidden_dim=CONFIG['ff_hidden_dim'],
         max_len_src=CONFIG[f"max_len_{CONFIG['src']}"],
         max_len_trg=CONFIG[f"max_len_{CONFIG['trg']}"],
-        dropout=CONFIG['dropout']
+        dropout=CONFIG['dropout'],
+        pos_type='rope' if CONFIG['use_rope'] else 'pos',
+        use_swig=CONFIG['use_swig']
     ).to(device)
     
     total_params = sum(p.numel() for p in model.parameters())

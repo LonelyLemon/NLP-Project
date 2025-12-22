@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from .multihead_attention import MultiHeadAttention
 from .feed_forward import FeedForward
+from .swiglu import SwiGLU
 
 class Decoder(nn.Module):
     def __init__(
@@ -10,12 +11,16 @@ class Decoder(nn.Module):
         num_heads, 
         ff_hidden_dim=2048, 
         dropout=0.1,
-        use_rope: bool = False
+        use_rope: bool = False,
+        use_swig: bool = False
     ):
         super().__init__()
         self.self_attn = MultiHeadAttention(model_dim, num_heads, dropout, use_rope)
         self.cross_attn = MultiHeadAttention(model_dim, num_heads, dropout, False)
-        self.ffn = FeedForward(model_dim, ff_hidden_dim, dropout)
+        if use_swig:
+            self.ffn = SwiGLU(model_dim=model_dim, hidden_dim=ff_hidden_dim)
+        else:
+            self.ffn = FeedForward(model_dim, ff_hidden_dim, dropout)
 
         self.norm1 = nn.LayerNorm(model_dim)
         self.norm2 = nn.LayerNorm(model_dim)

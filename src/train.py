@@ -135,7 +135,7 @@ class Trainer:
                 self.best_val_loss = val_loss
                 epochs_no_improve = 0
                 save_checkpoint(self.model, self.optimizer, epoch, train_loss, val_loss,
-                                self.checkpoint_dir / 'best_model.pt')
+                                self.checkpoint_path)
             else:
                 epochs_no_improve += 1
 
@@ -145,10 +145,6 @@ class Trainer:
             if epochs_no_improve >= patience:
                 print(f"Early stopping at epoch {epoch}")
                 break
-
-            if epoch % 5 == 0:
-                save_checkpoint(self.model, self.optimizer, epoch, train_loss, val_loss,
-                                self.checkpoint_dir / f'checkpoint_epoch_{epoch}.pt')
 
         self.save_history()
         print(f"Training completed | Best Val Loss: {self.best_val_loss:.4f}")

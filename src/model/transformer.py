@@ -19,7 +19,8 @@ class Transformer(nn.Module):
         max_len_src=150,
         max_len_trg=180,
         dropout=0.1,
-        pos_type: Literal['pos', 'rope'] = 'pos'
+        pos_type: Literal['pos', 'rope'] = 'pos',
+        use_swig: bool = False
     ):
         super().__init__()
         self.model_dim = model_dim
@@ -33,12 +34,12 @@ class Transformer(nn.Module):
         self.dropout = nn.Dropout(dropout)
         
         self.encoder_layers = nn.ModuleList([
-            Encoder(model_dim, num_heads, ff_hidden_dim, dropout, use_rope=(pos_type == 'rope'))
+            Encoder(model_dim, num_heads, ff_hidden_dim, dropout, use_rope=(pos_type == 'rope'), use_swig=use_swig)
             for _ in range(num_enc_layers)
         ])
         
         self.decoder_layers = nn.ModuleList([
-            Decoder(model_dim, num_heads, ff_hidden_dim, dropout, use_rope=(pos_type=='rope'))
+            Decoder(model_dim, num_heads, ff_hidden_dim, dropout, use_rope=(pos_type=='rope'), use_swig=use_swig)
             for _ in range(num_dec_layers)
         ])
         
