@@ -253,7 +253,7 @@ def main(config={}):
             device=device,
             src_vocab=src_vocab,
             trg_vocab=trg_vocab,
-            max_tgt_len=CONFIG[f"max_len{CONFIG['trg']}"]
+            max_tgt_len=CONFIG[f"max_len_{CONFIG['trg']}"]
         )
         trainer.train(
             num_epochs=CONFIG['num_epochs'],
