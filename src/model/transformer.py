@@ -54,8 +54,8 @@ class Transformer(nn.Module):
         """
         x = self.src_embedding(src)
         if self.pos_type == 'pos':
-            x = x * math.sqrt(self.model_dim)
             x = self.encoder_pe(x)
+            x = x * math.sqrt(self.model_dim)
         x = self.dropout(x)
         
         for layer in self.encoder_layers:
@@ -73,8 +73,8 @@ class Transformer(nn.Module):
         """
         x = self.tgt_embedding(tgt)
         if self.pos_type == 'pos':
-            x = x * math.sqrt(self.model_dim)
             x = self.decoder_pe(x)
+            x = x * math.sqrt(self.model_dim)
         x = self.dropout(x)
         
         for layer in self.decoder_layers:
