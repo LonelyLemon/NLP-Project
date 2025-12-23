@@ -16,9 +16,11 @@ class Transformer(nn.Module):
         num_enc_layers=6, 
         num_dec_layers=6, 
         ff_hidden_dim=2048, 
-        max_len=5000,
+        max_len_src=150,
+        max_len_trg=180,
         dropout=0.1,
-        pos_type: Literal['pos', 'rope'] = 'pos'
+        pos_type: Literal['pos', 'rope'] = 'pos',
+        use_swig: bool = False
     ):
         super().__init__()
         self.model_dim = model_dim
@@ -27,16 +29,17 @@ class Transformer(nn.Module):
         self.src_embedding = nn.Embedding(src_vocab_size, model_dim)
         self.tgt_embedding = nn.Embedding(tgt_vocab_size, model_dim)
         if self.pos_type == 'pos':
-            self.positional_encoding = PositionalEncoding(model_dim, max_len)
+            self.encoder_pe = PositionalEncoding(model_dim, max_len_src)
+            self.decoder_pe = PositionalEncoding(model_dim, max_len_trg)
         self.dropout = nn.Dropout(dropout)
         
         self.encoder_layers = nn.ModuleList([
-            Encoder(model_dim, num_heads, ff_hidden_dim, dropout, use_rope=(pos_type == 'rope'))
+            Encoder(model_dim, num_heads, ff_hidden_dim, dropout, use_rope=(pos_type == 'rope'), use_swig=use_swig)
             for _ in range(num_enc_layers)
         ])
         
         self.decoder_layers = nn.ModuleList([
-            Decoder(model_dim, num_heads, ff_hidden_dim, dropout, use_rope=(pos_type=='rope'))
+            Decoder(model_dim, num_heads, ff_hidden_dim, dropout, use_rope=(pos_type=='rope'), use_swig=use_swig)
             for _ in range(num_dec_layers)
         ])
         
@@ -49,9 +52,10 @@ class Transformer(nn.Module):
             src_mask: [B, 1, 1, S]
         Returns: [B, S, D]
         """
-        x = self.src_embedding(src) * math.sqrt(self.model_dim)
+        x = self.src_embedding(src)
         if self.pos_type == 'pos':
-            x = self.positional_encoding(x)
+            x = self.encoder_pe(x)
+            x = x * math.sqrt(self.model_dim)
         x = self.dropout(x)
         
         for layer in self.encoder_layers:
@@ -67,9 +71,10 @@ class Transformer(nn.Module):
             tgt_mask: [B, 1, T, T]
         Returns: [B, T, D]
         """
-        x = self.tgt_embedding(tgt) * math.sqrt(self.model_dim)
+        x = self.tgt_embedding(tgt)
         if self.pos_type == 'pos':
-            x = self.positional_encoding(x)
+            x = self.decoder_pe(x)
+            x = x * math.sqrt(self.model_dim)
         x = self.dropout(x)
         
         for layer in self.decoder_layers:
